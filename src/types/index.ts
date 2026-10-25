@@ -1,0 +1,237 @@
+/**
+ * WorthIt AI - Type Definitions
+ * Transparent, evidence-based product evaluation for India
+ */
+
+export type EvidenceType =
+  | 'verified'
+  | 'estimate'
+  | 'user-provided'
+  | 'ai-interpretation'
+  | 'unknown';
+
+export interface EvidenceField<T> {
+  value: T | null;
+  evidenceType: EvidenceType;
+  source?: string;
+  sourceUrl?: string;
+  date?: string;
+  notes?: string;
+}
+
+export type ProductCategory = 'laptop' | 'smartphone';
+
+export interface ProductSpecs {
+  processor?: EvidenceField<string>;
+  ram?: EvidenceField<string>;
+  storage?: EvidenceField<string>;
+  display?: EvidenceField<string>;
+  batteryCapacity?: EvidenceField<string>;
+  batteryLifeHours?: EvidenceField<number>;
+  weightKg?: EvidenceField<number>;
+  camera?: EvidenceField<string>;
+  os?: EvidenceField<string>;
+  ports?: EvidenceField<string>;
+  refreshRate?: EvidenceField<string>;
+  chargingSpeedWatts?: EvidenceField<number>;
+}
+
+export interface AspectSentiment {
+  aspect: string; // e.g. "Battery Life", "Thermal & Heating", "Display Quality"
+  positivePercentage: number; // 0-100
+  neutralPercentage: number;
+  negativePercentage: number;
+  totalMentions: number;
+  keyPhrases: string[];
+}
+
+export interface PriceQuote {
+  seller: string;
+  priceInr: number;
+  sourceUrl?: string;
+  retrievedAt: string;
+  notes?: string;
+}
+
+export interface ConflictingEvidence {
+  field: string;
+  claimA: { claim: string; source: string; sourceUrl?: string };
+  claimB: { claim: string; source: string; sourceUrl?: string };
+  explanation: string;
+}
+
+export interface GroundedSource {
+  title: string;
+  url: string;
+  domain?: string;
+  snippet?: string;
+  topic?: 'specs' | 'pricing' | 'warranty' | 'repairability' | 'issues';
+  retrievedAt: string;
+}
+
+export interface ReportedIssue {
+  category: string; // e.g. "Motherboard failure", "Green line on AMOLED", "Hinge cracking"
+  frequency: 'High' | 'Moderate' | 'Occasional' | 'Rare';
+  mentionCount: number;
+  description: string;
+  sampleQuotes: string[];
+  statusOrFix?: string; // e.g. "Free screen replacement program announced by brand in India"
+  sourcesMentioning?: { title: string; url?: string }[];
+}
+
+export interface ReviewDataset {
+  reviewCount: number;
+  dateRange: string;
+  source: string;
+  sampleType: 'licensed' | 'user-supplied' | 'demonstration';
+  aspects: AspectSentiment[];
+  reportedIssues: ReportedIssue[];
+  sourcesConsultedList?: { title: string; url?: string }[];
+  sourcesConsultedCount?: number;
+}
+
+export interface RepairabilityInfo {
+  scoreOutOfTen?: EvidenceField<number>;
+  batteryReplaceable?: EvidenceField<boolean>;
+  ramUpgradable?: EvidenceField<boolean>;
+  storageUpgradable?: EvidenceField<boolean>;
+  officialSparePartsInIndia?: EvidenceField<boolean>;
+  repairGuideAvailable?: EvidenceField<boolean>;
+  iFixitGuideUrl?: string;
+  notes?: EvidenceField<string>;
+}
+
+export interface WarrantySupportInfo {
+  standardWarrantyMonths?: EvidenceField<number>;
+  extendedWarrantyCostInr?: EvidenceField<number>;
+  softwareUpdatePolicyYears?: EvidenceField<number>;
+  securityPatchesYears?: EvidenceField<number>;
+  serviceCenterNetworkInIndia?: EvidenceField<string>;
+  sourceUrl?: string;
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  brand: string;
+  category: ProductCategory;
+  releaseYear: number;
+  imagePlaceholder?: string;
+  isDemonstrationData: boolean;
+  isLiveFetched?: boolean;
+  retrievedAt?: string;
+  priceInInr: EvidenceField<number>;
+  priceQuotes?: PriceQuote[];
+  conflictingSources?: ConflictingEvidence[];
+  specs: ProductSpecs;
+  warranty: WarrantySupportInfo;
+  repairability: RepairabilityInfo;
+  reviewData?: ReviewDataset;
+  sourcesConsulted?: GroundedSource[];
+  sourcesConsultedCount?: number;
+  dataCompleteness: number; // 0-100
+  lastUpdated: string;
+  sourceLinks?: { title: string; url: string; date: string }[];
+}
+
+export interface UserPreferences {
+  category: ProductCategory;
+  intendedUse: string[];
+  maxBudgetInInr?: number;
+  expectedOwnershipYears: number; // e.g. 2, 3, 4, 5
+  importanceWeights: {
+    batteryLife: number; // 1-5
+    performance: number; // 1-5
+    portability: number; // 1-5
+    repairability: number; // 1-5
+  };
+  essentialRequirements: string;
+}
+
+export interface DimensionScore {
+  id: string;
+  name: string;
+  score: number; // 0 - 100
+  weight: number; // 0 - 1 (normalized)
+  rawWeight: number; // Initial design weight
+  active: boolean;
+  evidenceCoverage: number; // 0 - 100%
+  reason: string;
+  evidenceType: EvidenceType;
+}
+
+export interface WorthItScoreResult {
+  overallScore: number | null; // null if insufficient evidence
+  isInsufficientEvidence: boolean;
+  activeDimensionCount: number;
+  totalDimensionCount: number;
+  dimensions: DimensionScore[];
+  strengths: string[];
+  issueSignals: string[];
+  tradeoffs: string[];
+  verdictSummary: string;
+  isProvisional: boolean;
+}
+
+export interface OwnershipCostInputs {
+  purchasePriceInr: number;
+  purchasePriceType: EvidenceType;
+  years: number;
+  dailyUsageHours: number;
+  powerDrawWatts: number;
+  electricityTariffInr: number; // Default ~7.5
+  batteryReplacementIncluded: boolean;
+  estimatedBatteryCostInr: number;
+  repairScenarioIncluded: boolean;
+  estimatedRepairCostInr: number;
+  accessoriesCostInr: number;
+}
+
+export interface OwnershipCostResult {
+  purchasePrice: number;
+  totalElectricityCost: number;
+  annualElectricityKwh: number;
+  annualElectricityCost: number;
+  maintenanceCost: number;
+  repairScenarioCost: number;
+  accessoriesCost: number;
+  totalCostOfOwnership: number;
+  monthlyEquivalent: number;
+  scenarios: {
+    low: number;
+    typical: number;
+    high: number;
+  };
+  assumptions: {
+    label: string;
+    value: string;
+    type: EvidenceType;
+  }[];
+}
+
+export interface CandidateProductMatch {
+  id: string;
+  name: string;
+  brand: string;
+  category: ProductCategory;
+  releaseYear: number;
+  matchConfidence: number; // 0 - 1
+  keyAttributes: string[];
+  needsConfirmationList: string[];
+  sourceInputType: 'photo' | 'url' | 'search';
+  identifiedDetails?: {
+    modelNumber?: string;
+    generation?: string;
+    variant?: string;
+  };
+}
+
+export interface UserFeedbackReport {
+  id: string;
+  productId: string;
+  productName: string;
+  type: 'incorrect_match' | 'misleading_result' | 'outdated_price' | 'inaccurate_specs' | 'other';
+  comment: string;
+  userEmail?: string;
+  timestamp: string;
+}
