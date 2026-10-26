@@ -91,7 +91,7 @@ export default function App() {
   }, [currentProduct.id, scoreResult.overallScore]);
 
   // Handlers for starting evaluation flows
-  const handleStartSearch = async (query: string, category: ProductCategory) => {
+  const handleStartSearch = async (query: string, category: ProductCategory = 'laptop') => {
     setSourceInputType('search');
     setQueryOrUrlText(query);
     setPhotoPreviewUrl(undefined);
@@ -396,14 +396,17 @@ export default function App() {
           <IdentifyPage
             loading={identifyLoading}
             error={identifyError}
-            sourceType={sourceInputType}
-            queryOrUrl={queryOrUrlText}
-            photoPreviewUrl={photoPreviewUrl}
+            sourceInputType={sourceInputType}
+            queryOrUrlText={queryOrUrlText}
+            photoUrl={photoPreviewUrl}
             identifiedDetails={identifiedDetails}
             candidates={candidates}
             needsConfirmationList={needsConfirmationList}
             onConfirmCandidate={handleConfirmCandidate}
-            onManualSearch={(q, cat) => handleStartSearch(q, cat)}
+            onRetry={() => {
+              if (sourceInputType === 'search') void handleStartSearch(queryOrUrlText);
+            }}
+            onManualSearch={(q: string) => { void handleStartSearch(q); }}
           />
         )}
 
@@ -422,6 +425,7 @@ export default function App() {
             product={currentProduct}
             scoreResult={scoreResult}
             preferences={userPreferences}
+            onUpdatePreferences={handleSavePreferences}
             isSaved={isCurrentProductSaved}
             isCompared={isCurrentProductCompared}
             onToggleSave={handleToggleSave}

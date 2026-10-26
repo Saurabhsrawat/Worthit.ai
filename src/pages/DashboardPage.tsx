@@ -3,6 +3,7 @@ import { Product, UserPreferences, WorthItScoreResult, UserFeedbackReport, Price
 import { EvidenceBadge } from '../components/common/EvidenceBadge';
 import { DataCompletenessMeter } from '../components/common/DataCompletenessMeter';
 import { FeedbackModal } from '../components/common/FeedbackModal';
+import { PersonalReview } from '../components/PersonalReview';
 import { calculateOwnershipCost, getDefaultOwnershipInputs } from '../lib/ownershipCost';
 import {
   Bookmark,
@@ -43,6 +44,7 @@ interface DashboardPageProps {
   product: Product;
   scoreResult: WorthItScoreResult;
   preferences?: UserPreferences;
+  onUpdatePreferences?: (prefs: UserPreferences) => void;
   isSaved: boolean;
   isCompared: boolean;
   onToggleSave: () => void;
@@ -60,6 +62,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   product,
   scoreResult,
   preferences,
+  onUpdatePreferences,
   isSaved,
   isCompared,
   onToggleSave,
@@ -483,6 +486,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
       </div>
 
+      {/* Your Personal Review (Headline verdict, written review, strong points, watch-outs, scorecard, suitedness) */}
+      <PersonalReview
+        product={product}
+        preferences={preferences}
+        userPrice={priceVal || undefined}
+        onUpdatePreferences={(updated) => {
+          if (onUpdatePreferences) {
+            onUpdatePreferences(updated);
+          }
+        }}
+        onOpenFeedback={() => setFeedbackOpen(true)}
+        onSubmitFeedback={onSubmitFeedback}
+      />
+
       {/* Grid: Strengths, Tradeoffs & Reported Issue Signals */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Strengths */}
@@ -624,7 +641,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     </span>
                   </td>
                   <td className="py-2.5 px-3 text-slate-600">
-                    {dim.explanation}
+                    {dim.reason}
                   </td>
                 </tr>
               ))}

@@ -235,3 +235,182 @@ export interface UserFeedbackReport {
   userEmail?: string;
   timestamp: string;
 }
+
+// --- PART A: FIT ENGINE & NEEDS-BASED VERDICT TYPES ---
+
+export type RequirementStatus = 'meets' | 'borderline' | 'fails' | 'unknown';
+
+export interface RequirementItem {
+  id: string;
+  label: string;
+  useCase?: string;
+  status: RequirementStatus;
+  actualValue: string | number | boolean | null;
+  threshold: string;
+  reason: string;
+  weight: number; // 1 - 5 from importance sliders or use case default
+  source?: string;
+  sourceUrl?: string;
+  evidenceType: EvidenceType;
+  isCustom?: boolean;
+}
+
+export interface CustomSpecCondition {
+  field: string;
+  operator: '>=' | '<=' | 'contains' | 'equals';
+  expectedValue: any;
+  description: string;
+}
+
+export interface FitEvaluation {
+  overallFitStatus: 'fits' | 'borderline' | 'fails' | 'insufficient_specs';
+  fitPercentage: number; // 0 - 100
+  requirements: RequirementItem[];
+  meetsCount: number;
+  borderlineCount: number;
+  failsCount: number;
+  unknownCount: number;
+  missingCoreSpecs: string[];
+}
+
+export type VerdictOutcome =
+  | 'worth_it'
+  | 'worth_it_with_caveats'
+  | 'not_worth_it'
+  | 'cant_tell_yet';
+
+export type VerdictConfidence = 'High' | 'Medium' | 'Low';
+
+export interface AlternativeProduct {
+  name: string;
+  priceInr: number;
+  keySpecs: string;
+  comparisonReason: string;
+  url?: string;
+  isGrounded: boolean;
+}
+
+export interface PriceHistoryEvent {
+  date: string;
+  priceInr: number;
+  type: 'launch' | 'price_cut' | 'sale';
+  title: string;
+  source?: string;
+  sourceUrl?: string;
+}
+
+export interface ObservedPriceSnapshot {
+  date: string;
+  priceInr: number;
+  seller: string;
+  sourceUrl?: string;
+}
+
+export interface VerdictResult {
+  outcome: VerdictOutcome;
+  title: string; // "Worth it for you" | "Worth it with caveats" | "Not worth it for you" | "Can't tell yet"
+  confidence: VerdictConfidence;
+  confidenceLabel: string; // e.g. "Based on specs and price only"
+  fit: FitEvaluation;
+  budgetAnalysis: {
+    withinBudget: boolean;
+    deltaInr: number;
+    deltaPercentage: number;
+    maxBudget?: number;
+    actualPrice?: number;
+  };
+  decisiveReasons: string[];
+  whatWouldMakeItWorthIt: string[];
+  whatWeCouldntCheck: {
+    item: string;
+    impactOnConfidence: string;
+  }[];
+  alternatives: AlternativeProduct[];
+  alternativesComparison: string;
+  launchPriceInfo?: {
+    launchPriceInr: number;
+    deltaFromLaunchInr: number;
+    launchDate?: string;
+    source?: string;
+    sourceUrl?: string;
+  };
+  worthItScore: number | null;
+  activeDimensionCount: number;
+  totalDimensionCount: number;
+}
+
+// --- PERSONAL REVIEW & SPEC ANALYSIS TYPES ---
+
+export type SpecRating = 'Excellent' | 'Good' | 'Average' | 'Weak' | 'Unknown';
+export type SpecRelevance = 'High' | 'Medium' | 'Low';
+
+export interface RatedSpec {
+  specKey: string;
+  specName: string;
+  rawText: string;
+  value: any;
+  evidenceType: EvidenceType;
+  source?: string;
+  sourceUrl?: string;
+  rating: SpecRating;
+  comparisonNote: string;
+  relevance: SpecRelevance;
+  relevanceReason: string;
+  scoreOutOf100: number | null;
+  priceBand: string;
+  isHighlight?: boolean;
+}
+
+export interface StrengthWeaknessItem {
+  id: string;
+  specKey: string;
+  specFact: string;
+  whyItMatters: string;
+  rating: SpecRating;
+  relevance: SpecRelevance;
+  evidenceType: EvidenceType;
+  source?: string;
+  sourceUrl?: string;
+}
+
+export interface TradeoffItem {
+  strongSpec: string;
+  weakSpec: string;
+  explanation: string;
+}
+
+export interface StandoutFeature {
+  specName: string;
+  value: string;
+  whyStandout: string;
+  evidenceType: EvidenceType;
+  source?: string;
+  sourceUrl?: string;
+}
+
+export interface SuitednessTags {
+  bestSuitedFor: string[];
+  notIdealFor: string[];
+}
+
+export interface SpecAnalysisResult {
+  ratedSpecs: RatedSpec[];
+  strengths: StrengthWeaknessItem[];
+  weaknesses: StrengthWeaknessItem[];
+  standouts: StandoutFeature[];
+  tradeoffs: TradeoffItem[];
+  suitedness: SuitednessTags;
+  unverifiableSpecs: { item: string; impact: string }[];
+  priceBand: string;
+}
+
+export interface PersonalReviewData {
+  productId: string;
+  profileHash: string;
+  verdict: VerdictResult;
+  analysis: SpecAnalysisResult;
+  writtenReview: string | null;
+  reviewStatus: 'verified' | 'ai-generated' | 'failed-validation' | 'quota-fallback';
+  generatedAt: string;
+}
+

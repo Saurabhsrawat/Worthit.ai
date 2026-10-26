@@ -273,6 +273,40 @@ export const MethodologyPage: React.FC = () => {
           </p>
         </div>
       </section>
+
+      {/* 7. Personal Review Engine & Reference Ranges */}
+      <section className="space-y-4">
+        <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-teal-700" />
+          <span>7. Personal Review Engine & Design Thresholds</span>
+        </h2>
+        <p className="text-sm text-slate-600 leading-relaxed">
+          The "Your Personal Review" feature at the top of each report delivers tailored, transparent advice that adapts directly to the buyer's workload, budget ceiling, and longevity horizon:
+        </p>
+
+        <div className="space-y-3 text-xs text-slate-600">
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-2">
+            <h3 className="font-bold text-slate-900 text-sm">Deterministic Spec Analysis (Pure TypeScript)</h3>
+            <p className="leading-relaxed">
+              Every key specification (CPU tier, RAM capacity, NVMe storage speed, display panel/refresh, battery Wh/mAh, charging speed, weight, camera optics, dedicated GPU, durability, and OS update years) is evaluated strictly against codified design thresholds in <code>lib/referenceRanges.ts</code> relative to the product's Indian price band. If a spec is undocumented, it returns <strong>Unknown</strong> and lowers confidence without guessing.
+            </p>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-2">
+            <h3 className="font-bold text-slate-900 text-sm">Workload Relevance & Ranking</h3>
+            <p className="leading-relaxed">
+              Strengths and weaknesses are ranked using <code>(Spec Rating × User Workload Relevance)</code>. For instance, an integrated graphics chip is rated acceptable for programming but ranks as a critical weakness for 3D gaming. A change in user profile immediately updates the scorecard and strengths ranking.
+            </p>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-2">
+            <h3 className="font-bold text-slate-900 text-sm">Strict Gemini Boundary & Post-Validation</h3>
+            <p className="leading-relaxed">
+              Prose generation uses a single ungrounded Gemini call passed <em>only</em> precomputed facts. Post-validation checks that every number and spec name in the prose exists in the input, and strictly prohibits the words "unreliable" and "guaranteed". If validation fails or quota is exhausted, prose is cleanly withheld while all objective scorecards and lists remain active.
+            </p>
+          </div>
+        </div>
+      </section>
     </div>
   );
 };

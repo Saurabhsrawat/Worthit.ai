@@ -66,7 +66,7 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
   const handleSave = () => {
     const numBudget = budget ? parseInt(budget.replace(/[^0-9]/g, ''), 10) : undefined;
     const prefs: UserPreferences = {
-      category: product.category,
+      category: product?.category || productCategory || 'laptop',
       intendedUse: selectedUses,
       maxBudgetInInr: numBudget && numBudget > 0 ? numBudget : undefined,
       expectedOwnershipYears: years,
@@ -91,7 +91,7 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
             Tailor Your Evaluation Criteria
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Evaluating: <span className="font-semibold text-slate-800">{product.name}</span>. All questions are skippable.
+            Evaluating: <span className="font-semibold text-slate-800">{product?.name || 'Device'}</span>. All questions are skippable.
           </p>
         </div>
         <button
