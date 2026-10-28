@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { Product, UserPreferences, WorthItScoreResult, UserFeedbackReport, PriceQuote, ConflictingEvidence, GroundedSource } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Product, ProductSpecs, UserPreferences, WorthItScoreResult, UserFeedbackReport, PriceQuote, ConflictingEvidence, GroundedSource } from '../types';
 import { EvidenceBadge } from '../components/common/EvidenceBadge';
 import { DataCompletenessMeter } from '../components/common/DataCompletenessMeter';
 import { FeedbackModal } from '../components/common/FeedbackModal';
+import { SpecEditModal } from '../components/common/SpecEditModal';
 import { PersonalReview } from '../components/PersonalReview';
+import { ResearchDebugPanel } from '../components/ResearchDebugPanel';
 import { calculateOwnershipCost, getDefaultOwnershipInputs } from '../lib/ownershipCost';
 import {
   Bookmark,
@@ -56,6 +58,7 @@ interface DashboardPageProps {
   onSubmitFeedback: (report: UserFeedbackReport) => void;
   onRefreshData?: () => void;
   isRefreshing?: boolean;
+  onUpdateSpecs?: (specs: ProductSpecs) => void;
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({
@@ -74,11 +77,28 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onSubmitFeedback,
   onRefreshData,
   isRefreshing = false,
+  onUpdateSpecs,
 }) => {
   const [userPriceInput, setUserPriceInput] = useState('');
   const [isEditingPrice, setIsEditingPrice] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [specEditOpen, setSpecEditOpen] = useState(false);
   const [thumbFeedback, setThumbFeedback] = useState<'up' | 'down' | null>(null);
+  const [retryCountdown, setRetryCountdown] = useState<number>(product.provenance?.retryAfterSeconds || 0);
+
+  useEffect(() => {
+    if (product.provenance?.retryAfterSeconds) {
+      setRetryCountdown(product.provenance.retryAfterSeconds);
+    }
+  }, [product.provenance?.retryAfterSeconds]);
+
+  useEffect(() => {
+    if (retryCountdown <= 0) return;
+    const interval = setInterval(() => {
+      setRetryCountdown((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [retryCountdown]);
 
   const priceVal = product.priceInInr?.value;
   const priceType = product.priceInInr?.evidenceType || 'unknown';
@@ -119,21 +139,122 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Demonstration Banner if active */}
-      {product.isDemonstrationData && (
-        <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-3 flex items-start sm:items-center justify-between gap-3 text-xs text-amber-900">
-          <div className="flex items-center gap-2">
+      {/* Provenance Banners */}
+      {product.isDemonstrationData ? (
+        <div className="bg-amber-50/90 border-2 border-amber-300 rounded-xl p-3.5 flex items-start sm:items-center justify-between gap-3 text-xs text-amber-950 shadow-xs">
+          <div className="flex items-center gap-2.5">
             <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
             <span>
-              <strong>Quick-start demonstration data:</strong> Basic identity confirmed. Click <em>Refresh live data</em> to execute full 2-step grounded research across Indian retailers.
+              <strong>Demonstration data, verify before relying on it:</strong> This product profile is pre-seeded for demonstration. Click <em>Refresh live data</em> to execute fresh grounded research across Indian retailers.
             </span>
           </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {onRefreshData && (
+              <button
+                onClick={onRefreshData}
+                disabled={isRefreshing}
+                className="px-2.5 py-1 text-xs font-semibold bg-amber-200 hover:bg-amber-300 text-amber-900 rounded-lg transition-colors flex items-center gap-1"
+              >
+                <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>{isRefreshing ? 'Refreshing...' : 'Refresh live data'}</span>
+              </button>
+            )}
+            <button
+              onClick={() => setFeedbackOpen(true)}
+              className="text-amber-800 underline hover:text-amber-950 font-medium whitespace-nowrap"
+            >
+              Report correction
+            </button>
+          </div>
+        </div>
+      ) : product.provenance?.reason === 'no_search_key' ? (
+        <div className="bg-blue-50/90 border-2 border-blue-300 rounded-xl p-3.5 flex items-start sm:items-center justify-between gap-3 text-xs text-blue-950 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <HelpCircle className="w-4 h-4 text-blue-600 shrink-0" />
+            <div>
+              <span className="font-bold">
+                Add a free Tavily key to enable live research:
+              </span>
+              <span className="text-blue-800 ml-1">
+                Configure TAVILY_API_KEY in your environment to fetch live web pages and retail prices from Indian stores. Displaying AI-recalled hardware specs and absolute reference ratings.
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setSpecEditOpen(true)}
+              className="px-2.5 py-1 text-xs font-semibold bg-white hover:bg-blue-100 text-blue-900 rounded-lg border border-blue-300 transition-colors"
+            >
+              Confirm / Edit Specs
+            </button>
+          </div>
+        </div>
+      ) : product.provenance?.status === 'unavailable' ? (
+        <div className="bg-rose-50/90 border-2 border-rose-300 rounded-xl p-3.5 flex items-start sm:items-center justify-between gap-3 text-xs text-rose-950 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            <div>
+              <span className="font-bold">
+                Live research unavailable, retry in {retryCountdown > 0 ? `${retryCountdown}s` : 'a few moments'}.
+              </span>
+              <span className="text-rose-800 ml-1">
+                {product.provenance?.reason === 'quota'
+                  ? 'Grounded search quota cooldown is active. Displaying local hardware analysis or unverified AI spec recall.'
+                  : 'Search providers returned no verified documents or encountered an error. You can manually enter or confirm specs.'}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setSpecEditOpen(true)}
+              className="px-2.5 py-1 text-xs font-semibold bg-rose-100 hover:bg-rose-200 text-rose-900 rounded-lg border border-rose-300 transition-colors"
+            >
+              Confirm / Edit Specs
+            </button>
+            {onRefreshData && (
+              <button
+                onClick={onRefreshData}
+                disabled={isRefreshing || retryCountdown > 0}
+                className="px-2.5 py-1 text-xs font-semibold bg-rose-700 hover:bg-rose-800 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1"
+              >
+                <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>Retry</span>
+              </button>
+            )}
+          </div>
+        </div>
+      ) : product.provenance?.status === 'partial' ? (
+        <div className="bg-sky-50/90 border-2 border-sky-300 rounded-xl p-3.5 flex items-start sm:items-center justify-between gap-3 text-xs text-sky-950 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-4 h-4 text-sky-600 shrink-0" />
+            <div>
+              <span className="font-bold">Partial live data:</span>
+              <span className="text-sky-800 ml-1">
+                Verified core specifications from {product.provenance?.groundingChunkCount || 0} grounded sources. Some secondary sections (such as warranty policies or repair teardowns) could not be verified without guessing.
+              </span>
+            </div>
+          </div>
           <button
-            onClick={() => setFeedbackOpen(true)}
-            className="text-amber-800 underline hover:text-amber-950 font-medium whitespace-nowrap shrink-0"
+            onClick={() => setSpecEditOpen(true)}
+            className="px-2.5 py-1 text-xs font-semibold bg-white hover:bg-sky-100 text-sky-900 rounded-lg border border-sky-300 transition-colors shrink-0"
           >
-            Report correction
+            Review Specs
           </button>
+        </div>
+      ) : (
+        <div className="bg-emerald-50/90 border border-emerald-300 rounded-xl p-3.5 flex items-start sm:items-center justify-between gap-3 text-xs text-emerald-950 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div>
+              <span className="font-bold">Live data:</span>
+              <span className="text-emerald-800 ml-1">
+                Full research verified with {product.provenance?.groundingChunkCount || product.sourcesConsultedCount || product.sourcesConsulted?.length || 0} real-time grounded sources across Indian retailers and official spec sheets.
+              </span>
+            </div>
+          </div>
+          <span className="text-[11px] font-mono text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded border border-emerald-200 shrink-0">
+            Live Verified
+          </span>
         </div>
       )}
 
@@ -220,11 +341,40 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   Live Grounded Data
                 </span>
               )}
+              {product.selectedVariant && (
+                <span className="bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded text-[11px] font-semibold flex items-center gap-1">
+                  <Layers className="w-3 h-3 text-teal-600" />
+                  Variant: {product.selectedVariant}
+                </span>
+              )}
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
               {product.name}
             </h1>
+
+            {/* Per-Section States (Requirement 6) */}
+            {product.sectionStatuses && (
+              <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px]">
+                <span className="text-slate-400 font-semibold mr-1">Section States:</span>
+                {Object.entries(product.sectionStatuses).map(([sec, info]) => {
+                  let badgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
+                  if (info.state === 'loaded') badgeClass = 'bg-emerald-50 text-emerald-800 border-emerald-200';
+                  if (info.state === 'partial') badgeClass = 'bg-blue-50 text-blue-800 border-blue-200';
+                  if (info.state === 'failed') badgeClass = 'bg-rose-50 text-rose-800 border-rose-200';
+                  if (info.state === 'quota-cooldown') badgeClass = 'bg-amber-50 text-amber-900 border-amber-300';
+                  return (
+                    <span
+                      key={sec}
+                      className={`px-2 py-0.5 rounded border capitalize font-mono ${badgeClass}`}
+                      title={info.reason || ''}
+                    >
+                      {sec}: {info.state === 'quota-cooldown' ? 'Quota cooldown' : info.state}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Price display or user-price input */}
             <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -486,6 +636,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
       </div>
 
+      {/* Collapsible Research Debug & Claim Audit Panel (Requirement 1: Visible in dev mode or via ?debug=1) */}
+      <ResearchDebugPanel product={product} />
+
       {/* Your Personal Review (Headline verdict, written review, strong points, watch-outs, scorecard, suitedness) */}
       <PersonalReview
         product={product}
@@ -659,7 +812,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <Cpu className="w-4 h-4 text-teal-700" />
               <span>Hardware Specification Evidence</span>
             </h2>
-            <span className="text-xs text-slate-500 font-mono">Indian Variant</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSpecEditOpen(true)}
+                className="px-2.5 py-1 text-xs font-semibold bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-lg border border-teal-200 transition-colors inline-flex items-center gap-1.5 shadow-2xs"
+              >
+                <Edit2 className="w-3 h-3 text-teal-700" />
+                <span>Edit / Confirm Specs</span>
+              </button>
+              <span className="text-xs text-slate-500 font-mono hidden sm:inline">Indian Variant</span>
+            </div>
           </div>
 
           <div className="space-y-3 text-xs">
@@ -967,6 +1130,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         productId={product.id}
         productName={product.name}
         onSubmit={onSubmitFeedback}
+      />
+
+      {/* Tier 3 Spec Confirmation/Edit Modal */}
+      <SpecEditModal
+        product={product}
+        isOpen={specEditOpen}
+        onClose={() => setSpecEditOpen(false)}
+        onSave={(updatedSpecs) => {
+          if (onUpdateSpecs) {
+            onUpdateSpecs(updatedSpecs);
+          }
+        }}
       />
     </div>
   );

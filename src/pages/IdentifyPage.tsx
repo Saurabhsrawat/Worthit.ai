@@ -10,6 +10,7 @@ import {
   ArrowRight,
   ShieldAlert,
   Edit3,
+  Layers,
 } from 'lucide-react';
 
 interface IdentifyPageProps {
@@ -27,7 +28,7 @@ interface IdentifyPageProps {
     visibleText?: string;
   };
   needsConfirmationList?: string[];
-  onConfirmCandidate: (candidate: CandidateProductMatch) => void;
+  onConfirmCandidate: (candidate: CandidateProductMatch, variant?: string) => void;
   onRetry: () => void;
   onManualSearch: (query: string) => void;
 }
@@ -48,6 +49,8 @@ export const IdentifyPage: React.FC<IdentifyPageProps> = ({
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(
     candidates[0]?.id || null
   );
+  const [selectedVariant, setSelectedVariant] = useState<string>('');
+  const [customVariant, setCustomVariant] = useState<string>('');
   const [manualQuery, setManualQuery] = useState('');
   const [isManualOverride, setIsManualOverride] = useState(false);
 
@@ -210,8 +213,13 @@ export const IdentifyPage: React.FC<IdentifyPageProps> = ({
                     <div className="space-y-2.5">
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="text-[11px] font-medium text-slate-500">
-                            {cand.brand} · {cand.category === 'laptop' ? 'Laptop' : 'Smartphone'} · {cand.releaseYear}
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-slate-500">
+                            <span>{cand.brand} · {cand.category === 'laptop' ? 'Laptop' : 'Smartphone'} · {cand.releaseYear}</span>
+                            {cand.isAiSuggested && (
+                              <span className="bg-purple-100 text-purple-800 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-purple-200">
+                                AI suggestions, confirm the exact model
+                              </span>
+                            )}
                           </div>
                           <h3 className="text-base font-bold text-slate-900 mt-0.5">
                             {cand.name}
@@ -219,12 +227,14 @@ export const IdentifyPage: React.FC<IdentifyPageProps> = ({
                         </div>
                         <span
                           className={`text-xs font-mono font-semibold px-2 py-0.5 rounded border whitespace-nowrap ${
-                            matchPct >= 80
+                            cand.isAiSuggested
+                              ? 'bg-purple-50 text-purple-800 border-purple-200'
+                              : matchPct >= 80
                               ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                               : 'bg-amber-50 text-amber-800 border-amber-200'
                           }`}
                         >
-                          {matchPct}% match
+                          {cand.isAiSuggested ? 'AI Suggested' : `${matchPct}% match`}
                         </span>
                       </div>
 
@@ -247,7 +257,9 @@ export const IdentifyPage: React.FC<IdentifyPageProps> = ({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onConfirmCandidate(cand);
+                          setSelectedCandidateId(cand.id);
+                          const activeVar = selectedVariant || customVariant || cand.variants?.[0];
+                          onConfirmCandidate(cand, activeVar);
                         }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 ${
                           isSelected
@@ -264,6 +276,56 @@ export const IdentifyPage: React.FC<IdentifyPageProps> = ({
               })}
             </div>
           </div>
+
+          {/* Variant Selection (Requirement 5: Identify the Variant) */}
+          {selectedCandidate && (
+            <div className="bg-teal-50/80 border border-teal-200 rounded-xl p-5 space-y-3">
+              <div className="flex items-center gap-2 text-xs font-bold text-teal-900 uppercase tracking-wider">
+                <Layers className="w-4 h-4 text-teal-700" />
+                <span>Step 2: Choose Exact Hardware Variant</span>
+              </div>
+              <p className="text-xs text-teal-900/90 leading-relaxed">
+                Indian models often ship in several RAM/storage tiers with differing retail prices. Choose your intended configuration so specs and pricing are researched for that exact variant:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
+                {(selectedCandidate.variants || [
+                  selectedCandidate.category === 'smartphone' ? '8GB RAM / 128GB Storage' : '16GB RAM / 512GB SSD',
+                  selectedCandidate.category === 'smartphone' ? '12GB RAM / 256GB Storage' : '16GB RAM / 1TB SSD',
+                ]).map((v, idx) => {
+                  const isVarSelected = (selectedVariant || selectedCandidate.variants?.[0] || '16GB RAM / 512GB SSD') === v && !customVariant;
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setSelectedVariant(v);
+                        setCustomVariant('');
+                      }}
+                      className={`px-3.5 py-2.5 rounded-lg text-xs font-medium text-left border transition-all ${
+                        isVarSelected
+                          ? 'bg-teal-800 text-white border-teal-800 shadow-sm ring-2 ring-teal-600/30 font-semibold'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-teal-300'
+                      }`}
+                    >
+                      {v}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="pt-2">
+                <input
+                  type="text"
+                  placeholder="Or enter custom configuration (e.g. 16GB RAM / 512GB SSD / Intel Core i5)..."
+                  value={customVariant}
+                  onChange={(e) => {
+                    setCustomVariant(e.target.value);
+                    setSelectedVariant(e.target.value);
+                  }}
+                  className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-700"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Needs Confirmation Checklist */}
           {selectedCandidate && (
@@ -294,11 +356,16 @@ export const IdentifyPage: React.FC<IdentifyPageProps> = ({
           {/* Final Action Bar */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
             <button
-              onClick={() => onConfirmCandidate(selectedCandidate)}
+              onClick={() => {
+                const activeVar = selectedVariant || customVariant || selectedCandidate?.variants?.[0];
+                onConfirmCandidate(selectedCandidate, activeVar);
+              }}
               disabled={!selectedCandidate}
               className="px-6 py-2.5 bg-teal-800 hover:bg-teal-900 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-all shadow-sm flex items-center gap-2"
             >
-              <span>Confirm "{selectedCandidate?.name}" & Set Preferences</span>
+              <span>
+                Confirm "{selectedCandidate?.name}" {selectedVariant ? `(${selectedVariant})` : ''} & Set Preferences
+              </span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

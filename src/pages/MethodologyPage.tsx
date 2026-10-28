@@ -77,35 +77,52 @@ export const MethodologyPage: React.FC = () => {
         </div>
       </section>
 
-      {/* 2. Live 2-Step Grounded Research Pipeline */}
+      {/* 2. Free Search + Fetch + Extract Research Pipeline */}
       <section className="space-y-4">
         <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-teal-700" />
-          <span>2. Live 2-Step Grounded Research Pipeline</span>
+          <span>2. Free Search + Fetch + Extract Research Pipeline</span>
         </h2>
         <p className="text-sm text-slate-600 leading-relaxed">
-          WorthIt AI does not rely on static training-data memory. To research any laptop or smartphone sold in India, it executes a rigorous two-step grounded pipeline:
+          WorthIt AI operates completely on free-tier APIs without requiring paid Gemini search-grounding billing. To evaluate any laptop or smartphone sold in India, it executes a modular three-stage pipeline:
         </p>
 
         <div className="space-y-3">
           <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-3">
             <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
-              <span className="w-6 h-6 rounded-md bg-teal-100 text-teal-800 flex items-center justify-center text-xs">A</span>
-              <span>Step A: Grounded Information Gathering with Google Search</span>
+              <span className="w-6 h-6 rounded-md bg-teal-100 text-teal-800 flex items-center justify-center text-xs">1</span>
+              <span>Search Adapter (Server-Side)</span>
             </div>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Gemini queries live web sources across 5 focused topics: (1) Official Indian variant specifications, (2) Current Indian price quotes (Amazon.in, Flipkart, Croma, Reliance Digital), (3) Manufacturer warranty terms & software update commitments, (4) Repairability scores & spare parts, and (5) Customer-reported defect themes. The engine captures raw text and exact <code>groundingMetadata.groundingChunks</code> (actual URLs and titles).
+              When a product and variant are confirmed, the server executes at most two targeted search queries: (1) <code>"&lt;product&gt; &lt;variant&gt; specifications India"</code> and (2) <code>"&lt;product&gt; price India buy"</code>. The queries are handled by a pluggable <code>SearchProvider</code> (Tavily free tier, Google Custom Search Engine, or a graceful NoSearch fallback). Results are cached server-side for 24 hours with in-flight deduplication to avoid redundant network traffic.
             </p>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-3">
             <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
-              <span className="w-6 h-6 rounded-md bg-teal-100 text-teal-800 flex items-center justify-center text-xs">B</span>
-              <span>Step B: Strict JSON Schema Normalization (No Hallucination)</span>
+              <span className="w-6 h-6 rounded-md bg-teal-100 text-teal-800 flex items-center justify-center text-xs">2</span>
+              <span>Authoritative Webpage Fetching & Jina Reader Hydration</span>
             </div>
             <p className="text-xs text-slate-600 leading-relaxed">
-              The collected grounded text and source list are passed into a parser run without search tools, constrained by a strict JSON schema. The model is forbidden from inventing facts not present in Step A. If a field was not supported in the search results, it must return <code>null</code> with status <code>"unknown"</code>. Real source URLs are attached to each confirmed claim.
+              The engine ranks candidate URLs, prioritizing official manufacturer portals (Apple India, Samsung India, Lenovo India, Asus India, Xiaomi India), GSMArena, NotebookCheck, and authorized retail listings (Amazon.in, Flipkart, Croma). Pages are fetched server-side with an 8-second timeout and 1MB size limit. If direct HTML is JavaScript-heavy or thin, it falls back to <code>r.jina.ai</code> for clean Markdown rendering. Full page text is never stored beyond the request lifecycle.
             </p>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+              <span className="w-6 h-6 rounded-md bg-teal-100 text-teal-800 flex items-center justify-center text-xs">3</span>
+              <span>Ungrounded Gemini Extraction & The Transparent Claim Filter</span>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              A single ungrounded Gemini call (no tools, JSON schema only) parses the fetched text in a merged extraction for specifications, pricing, and warranty policies. The Claim Filter enforces strict provenance:
+            </p>
+            <ul className="text-xs text-slate-600 space-y-1.5 list-disc pl-5">
+              <li><strong>Zero-Hallucination Match:</strong> An extracted value is kept only if it appears directly in the fetched webpage text (normalized string/number matching).</li>
+              <li><strong>Indicative Pricing:</strong> Retail prices are kept only when explicitly tied to an authorized seller name in the fetched text. If absent, the price is marked "Price not found" with a manual user input field.</li>
+              <li><strong>Evidence Status:</strong> Fields from reputable domains (manufacturer, GSMArena, NotebookCheck, iFixit, Amazon, Flipkart) are marked <code>verified</code>; others are marked <code>reported by web sources</code> with exact URL citations.</li>
+              <li><strong>Three-Tier Fallback Order:</strong> Tier 1 (fetched authoritative pages) &rarr; Tier 2 (AI-recalled specs for missing core specs only, marked <code>unverified</code>, never for price or warranty) &rarr; Tier 3 (user review/edit form).</li>
+              <li><strong>Independent Circuit Breakers:</strong> Search provider rate limits and Gemini quotas have separate cooldown monitors with real-time countdown diagnostics visible via <code>?debug=1</code>.</li>
+            </ul>
           </div>
         </div>
       </section>
@@ -255,21 +272,47 @@ export const MethodologyPage: React.FC = () => {
         </div>
       </section>
 
-      {/* 6. Review Rigor & Known Limitations */}
+      {/* 6. Coverage Scope & Known Limitations */}
       <section className="space-y-4">
         <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
           <AlertTriangle className="w-5 h-5 text-amber-600" />
-          <span>6. Known Limitations & Caveats</span>
+          <span>6. Coverage Scope, What is & Isn't Covered, and Caveats</span>
         </h2>
-        <div className="bg-slate-50 rounded-2xl border border-slate-200 p-6 space-y-3 text-xs text-slate-600 leading-relaxed">
-          <p>
-            • <strong>Review Mentions ≠ Defect Rates:</strong> Online review discourse is inherently self-selecting; consumers who encounter bugs post far more frequently than satisfied owners. We report reported themes, never statistical failure rates.
-          </p>
-          <p>
-            • <strong>No Silent Extrapolation:</strong> If a specification or Indian warranty policy is absent from official documentation, our completeness meter drops and the missing field is highlighted in yellow as Unknown.
-          </p>
-          <p>
-            • <strong>Price Volatility:</strong> Indian e-commerce prices fluctuate constantly during flash sales and credit card bank discount campaigns. Prices displayed are indicative snapshots with date of retrieval.
+        <div className="bg-slate-50 rounded-2xl border border-slate-200 p-6 space-y-4 text-xs text-slate-600 leading-relaxed">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white p-4 rounded-xl border border-emerald-200 space-y-2">
+              <h3 className="font-bold text-emerald-900 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>What Is Covered</span>
+              </h3>
+              <ul className="space-y-1.5 text-slate-700 list-disc pl-4">
+                <li><strong>All Modern Laptops & Smartphones in India:</strong> Any model sold through official or authorized Indian channels (Apple India, Samsung, Asus, Lenovo, Xiaomi/Redmi, HP, Dell, OnePlus, Motorola, Nothing, iQOO, Realme, Acer).</li>
+                <li><strong>9 Core Technical Fields:</strong> Processor/SoC model, RAM configuration, storage drive type/size, display specs, battery capacity/endurance, weight, OS/software update lifespan, warranty duration in India, and live market price quotes in INR.</li>
+                <li><strong>Three-Tier Spec Fallback Architecture:</strong> Tier 1: Real-time grounded Google Search and direct server-side page scraping. Tier 2: AI parametric spec recall (strictly marked unverified and never used for price, warranty, or repair scores). Tier 3: Direct User Confirm & Edit form with 'User-provided' provenance tags.</li>
+                <li><strong>Absolute Hardware Capability Thresholds:</strong> Spec performance ratings (CPU tier, RAM, display, battery) evaluate absolute technical competence independently of price presence, eliminating misleading "price unverified" spec downgrades.</li>
+                <li><strong>Variant Disambiguation:</strong> Multi-tier RAM/storage options are identified and selected prior to research so specs are never cross-pollinated.</li>
+                <li><strong>24-Hour Verified Cache:</strong> Results are cached for 24 hours to prevent unnecessary quota depletion while allowing one-click manual re-verification.</li>
+                <li><strong>Telemetry & Claim Auditing:</strong> The Research Debug panel transparently logs grounding chunks, raw text length, kept fields, and dropped fields with reasons.</li>
+              </ul>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl border border-amber-200 space-y-2">
+              <h3 className="font-bold text-amber-900 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                <HelpCircle className="w-4 h-4 text-amber-600" />
+                <span>What Isn't Covered (Known Limitations)</span>
+              </h3>
+              <ul className="space-y-1.5 text-slate-700 list-disc pl-4">
+                <li><strong>Zero Fabricated Fallbacks:</strong> When live research fails due to network outage or search quota, WorthIt AI returns an honest 'Unavailable' state with a cooldown timer. It never fabricates placeholder prices (e.g. ₹45,000) or fake warranty periods.</li>
+                <li><strong>Unannounced / Prototype Hardware:</strong> Products without commercial retail listings or official Indian distribution channels cannot be verified.</li>
+                <li><strong>Bulk Scraping:</strong> WorthIt AI does not crawl retailer HTML in bulk. Pages fetched server-side are strictly limited to the top 3 grounding references with 8s timeouts and 1MB size caps.</li>
+                <li><strong>Real-Time Flash Sale Stock:</strong> E-commerce prices fluctuate minute-by-minute with temporary bank coupons. Displayed prices are indicative market quotes with exact timestamp of retrieval.</li>
+                <li><strong>Statistical Failure Rates:</strong> Forum mentions (e.g. Reddit r/IndianGaming) highlight reported defect patterns, not statistically sampled failure rates.</li>
+              </ul>
+            </div>
+          </div>
+
+          <p className="pt-2 text-slate-500 italic">
+            • <strong>No Silent Extrapolation:</strong> If any specification or Indian warranty clause cannot be verified through official documentation or reputable portals, it is marked as Unknown and score confidence is lowered accordingly.
           </p>
         </div>
       </section>

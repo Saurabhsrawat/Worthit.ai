@@ -5,7 +5,7 @@ import { calculateWorthItScore, calculateDataCompleteness } from './lib/scoring'
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { primaryAdapter, seedAdapter } from './services/adapters';
 import { identifyProductFromImage, identifyProductFromUrl } from './services/gemini';
-import { fetchLiveProduct, saveCachedProduct, getCachedProduct } from './services/research';
+import { fetchLiveProduct, fetchLiveProductProgressive, saveCachedProduct, getCachedProduct } from './services/research';
 import { Navbar, ActivePage } from './components/Navbar';
 import { LandingPage } from './pages/LandingPage';
 import { IdentifyPage } from './pages/IdentifyPage';
@@ -168,39 +168,73 @@ export default function App() {
     }
   };
 
-  // Human Confirmation of Product Match
-  const handleConfirmCandidate = async (candidate: CandidateProductMatch) => {
-    // 1. Check local seed catalogue first
-    const seed = await seedAdapter.getProductById(candidate.id);
-    if (seed) {
-      setCurrentProduct(seed);
-      setActivePage('preferences');
-      return;
-    }
-
-    // 2. Check local storage cache
-    const cached = getCachedProduct(candidate.name);
-    if (cached) {
+  // Human Confirmation of Product Match with Variant Support
+  const handleConfirmCandidate = async (candidate: CandidateProductMatch, variant?: string) => {
+    // 1. Check 24-hour local storage cache (enforces v3-live and liveFetched === true)
+    const cached = getCachedProduct(candidate.name, variant);
+    if (cached && cached.provenance?.liveFetched) {
       setCurrentProduct(cached);
       setActivePage('preferences');
       return;
     }
 
-    // 3. Not in seed or cache -> run live grounded research pipeline!
+    // 2. Always run live research pipeline for all products (seeded and non-seeded)
     setIsLiveResearching(true);
-    setResearchProgressMsg(`Executing 2-step grounded research across Indian sources for ${candidate.name}...`);
+    setResearchProgressMsg(`Researching live specifications and pricing for ${candidate.name} ${variant ? `(${variant})` : ''}...`);
 
     try {
-      const liveProduct = await fetchLiveProduct(
+      const liveProduct = await fetchLiveProductProgressive(
         candidate.name,
         candidate.category,
+        variant,
         false,
+        (partialProduct) => {
+          setCurrentProduct(partialProduct);
+        },
         (progress) => setResearchProgressMsg(progress.message)
       );
       setCurrentProduct(liveProduct);
       setActivePage('preferences');
     } catch (err: any) {
-      console.warn('Live research failed, creating baseline verified shell', err);
+      console.warn('Live research failed, checking seed catalogue fallback', err);
+      // Emergency fallback: use seed specs only if live research fails, and strictly marked as demonstration
+      const seed = await seedAdapter.getProductById(candidate.id);
+      if (seed) {
+        // Enforce all specs marked as demonstration, never verified
+        const demoSpecs: any = {};
+        for (const [k, v] of Object.entries(seed.specs || {})) {
+          if (v && v.value) {
+            demoSpecs[k] = {
+              value: v.value,
+              evidenceType: 'seed-demo',
+              source: 'Demonstration catalog, verify before relying on it',
+              notes: 'Demonstration data, confirm exact spec with retailer',
+            };
+          }
+        }
+        const fallbackSeedProduct: Product = {
+          ...seed,
+          selectedVariant: variant || (seed.category === 'smartphone' ? '8GB RAM / 128GB' : '16GB RAM / 512GB SSD'),
+          isDemonstrationData: true,
+          isLiveFetched: false,
+          specs: demoSpecs,
+          priceInInr: { value: null, evidenceType: 'unknown', notes: 'Price not verified' },
+          warranty: {},
+          repairability: {},
+          provenance: {
+            liveFetched: false,
+            groundingChunkCount: 0,
+            retrievedAt: new Date().toISOString(),
+            status: 'unavailable',
+            reason: 'error',
+            retryAfterSeconds: 60,
+          },
+        };
+        setCurrentProduct(fallbackSeedProduct);
+        setActivePage('preferences');
+        return;
+      }
+
       const fallbackShell: Product = {
         id: candidate.id,
         name: candidate.name,
@@ -208,14 +242,23 @@ export default function App() {
         category: candidate.category,
         releaseYear: candidate.releaseYear,
         isDemonstrationData: false,
-        isLiveFetched: true,
+        isLiveFetched: false,
+        selectedVariant: variant,
         retrievedAt: new Date().toISOString(),
         priceInInr: { value: null, evidenceType: 'unknown' },
         specs: {},
         warranty: {},
         repairability: {},
-        dataCompleteness: 30,
+        dataCompleteness: 0,
         lastUpdated: new Date().toISOString().split('T')[0],
+        provenance: {
+          liveFetched: false,
+          groundingChunkCount: 0,
+          retrievedAt: new Date().toISOString(),
+          status: 'unavailable',
+          reason: 'error',
+          retryAfterSeconds: 60,
+        },
       };
       setCurrentProduct(fallbackShell);
       setActivePage('preferences');
@@ -224,15 +267,19 @@ export default function App() {
     }
   };
 
-  // Refresh live data for current product
+  // Refresh live data for current product (forces fresh 2-step research)
   const handleRefreshData = async () => {
     if (!currentProduct || isRefreshing) return;
     setIsRefreshing(true);
     try {
-      const updated = await fetchLiveProduct(
+      const updated = await fetchLiveProductProgressive(
         currentProduct.name,
         currentProduct.category,
+        currentProduct.selectedVariant,
         true, // force refresh
+        (partialProduct) => {
+          setCurrentProduct(partialProduct);
+        },
         () => {}
       );
       setCurrentProduct(updated);
@@ -289,6 +336,20 @@ export default function App() {
     saveCachedProduct(updated);
 
     // Update in saved list if present
+    setSavedProducts((prev) =>
+      prev.map((p) => (p.id === updated.id ? updated : p))
+    );
+  };
+
+  // Update hardware specs (Tier 3 spec fallback)
+  const handleUpdateSpecs = (updatedSpecs: Product['specs']) => {
+    const updated: Product = {
+      ...currentProduct,
+      specs: updatedSpecs,
+    };
+    updated.dataCompleteness = calculateDataCompleteness(updated);
+    setCurrentProduct(updated);
+    saveCachedProduct(updated);
     setSavedProducts((prev) =>
       prev.map((p) => (p.id === updated.id ? updated : p))
     );
@@ -437,6 +498,7 @@ export default function App() {
             onSubmitFeedback={handleSubmitFeedback}
             onRefreshData={handleRefreshData}
             isRefreshing={isRefreshing}
+            onUpdateSpecs={handleUpdateSpecs}
           />
         )}
 

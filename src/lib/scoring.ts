@@ -20,53 +20,72 @@ export function calculateDataCompleteness(product: Product): number {
   let totalFields = 0;
   let filledFields = 0;
 
-  // Price
-  totalFields++;
-  if (product.priceInInr && product.priceInInr.value !== null && product.priceInInr.evidenceType !== 'unknown') {
-    filledFields++;
-  }
-
-  // Specs
-  const keySpecKeys: (keyof typeof product.specs)[] = [
-    'processor',
-    'ram',
-    'storage',
-    'display',
-    'batteryCapacity',
-  ];
-  for (const k of keySpecKeys) {
-    totalFields++;
-    const spec = product.specs[k];
-    if (spec && spec.value !== null && spec.evidenceType !== 'unknown') {
-      filledFields++;
+  const isGroundedField = (field?: { value?: any; evidenceType?: string }) => {
+    if (!field || field.value === null || field.value === undefined || field.value === 'Unknown' || field.value === '') {
+      return false;
     }
-  }
+    // Only verified, web-reported, user-provided, or demo seed count towards completeness. AI-recalled does NOT count as grounded completeness.
+    return field.evidenceType === 'verified' ||
+      field.evidenceType === 'web-reported' ||
+      field.evidenceType === 'user-provided' ||
+      (product.isDemonstrationData && field.evidenceType === 'seed-demo');
+  };
 
-  // Warranty
+  // 1. Price
   totalFields++;
-  if (product.warranty.standardWarrantyMonths && product.warranty.standardWarrantyMonths.value !== null) {
+  if (isGroundedField(product.priceInInr)) {
     filledFields++;
   }
 
-  // Software updates
+  // 2. Processor
   totalFields++;
-  if (product.warranty.softwareUpdatePolicyYears && product.warranty.softwareUpdatePolicyYears.value !== null) {
+  if (isGroundedField(product.specs.processor)) {
     filledFields++;
   }
 
-  // Repairability
+  // 3. RAM
   totalFields++;
-  if (product.repairability.scoreOutOfTen && product.repairability.scoreOutOfTen.value !== null) {
+  if (isGroundedField(product.specs.ram)) {
     filledFields++;
   }
 
-  // Reviews data
+  // 4. Storage
   totalFields++;
-  if (product.reviewData && product.reviewData.reviewCount > 0) {
+  if (isGroundedField(product.specs.storage)) {
     filledFields++;
   }
 
-  return Math.round((filledFields / totalFields) * 100);
+  // 5. Display
+  totalFields++;
+  if (isGroundedField(product.specs.display)) {
+    filledFields++;
+  }
+
+  // 6. Battery
+  totalFields++;
+  if (isGroundedField(product.specs.batteryCapacity) || isGroundedField((product.specs as any).battery)) {
+    filledFields++;
+  }
+
+  // 7. Weight
+  totalFields++;
+  if (isGroundedField(product.specs.weightKg) || isGroundedField((product.specs as any).weight)) {
+    filledFields++;
+  }
+
+  // 8. Warranty
+  totalFields++;
+  if (isGroundedField(product.warranty.standardWarrantyMonths)) {
+    filledFields++;
+  }
+
+  // 9. Software updates
+  totalFields++;
+  if (isGroundedField(product.warranty.softwareUpdatePolicyYears) || isGroundedField((product.specs as any).softwareUpdates)) {
+    filledFields++;
+  }
+
+  return totalFields > 0 ? Math.round((filledFields / totalFields) * 100) : 0;
 }
 
 /**

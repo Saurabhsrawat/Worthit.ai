@@ -104,6 +104,23 @@ export interface SpecReferenceRange {
   }>;
 }
 
+// Absolute Design Thresholds (price-independent baseline ratings)
+export const ABSOLUTE_LAPTOP_THRESHOLDS = {
+  ram: { weakMax: 4, averageMax: 8, goodMax: 16 } as NumericThresholdRule,
+  storage: { weakMax: 256, averageMax: 511, goodMax: 1023 } as NumericThresholdRule,
+  batteryHours: { weakMax: 5, averageMax: 7.5, goodMax: 10.5 } as NumericThresholdRule,
+  weight: { weakMax: 2.1, averageMax: 1.7, goodMax: 1.4 } as NumericThresholdRule, // lower is better
+  chargingWatts: { weakMax: 45, averageMax: 64, goodMax: 99 } as NumericThresholdRule,
+};
+
+export const ABSOLUTE_SMARTPHONE_THRESHOLDS = {
+  ram: { weakMax: 4, averageMax: 6, goodMax: 11 } as NumericThresholdRule,
+  storage: { weakMax: 64, averageMax: 128, goodMax: 255 } as NumericThresholdRule,
+  batteryMah: { weakMax: 4500, averageMax: 4999, goodMax: 5400 } as NumericThresholdRule,
+  chargingWatts: { weakMax: 20, averageMax: 44, goodMax: 79 } as NumericThresholdRule,
+  softwareSupportYears: { weakMax: 1, averageMax: 2, goodMax: 4 } as NumericThresholdRule,
+};
+
 // Design Thresholds: Laptop Spec Reference Ranges
 export const LAPTOP_REFERENCE_RANGES: Record<string, SpecReferenceRange> = {
   ram: {

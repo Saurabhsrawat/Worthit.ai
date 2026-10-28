@@ -25,6 +25,8 @@ import {
   LAPTOP_REFERENCE_RANGES,
   SMARTPHONE_REFERENCE_RANGES,
   NumericThresholdRule,
+  ABSOLUTE_LAPTOP_THRESHOLDS,
+  ABSOLUTE_SMARTPHONE_THRESHOLDS,
 } from './referenceRanges';
 import {
   parseRamGb,
@@ -198,7 +200,7 @@ export function analyzeProductSpecs(
   const unverifiableSpecs: { item: string; impact: string }[] = [];
 
   // Helper to push unknown spec
-  const pushUnknownSpec = (specKey: string, specName: string, rawText = 'Not documented in verified sources', impact = 'Reduces verdict certainty') => {
+  const pushUnknownSpec = (specKey: string, specName: string, rawText = 'Not documented in research data', impact = 'Reduces verdict certainty') => {
     const rel = computeRelevance(specKey, category, preferences);
     ratedSpecs.push({
       specKey,
@@ -207,7 +209,7 @@ export function analyzeProductSpecs(
       value: null,
       evidenceType: 'unknown',
       rating: 'Unknown',
-      comparisonNote: bandId ? `No verified data available to rate against ${bandLabel}` : 'Price or spec not verified',
+      comparisonNote: `${specName} missing from research data`,
       relevance: rel.relevance,
       relevanceReason: rel.reason,
       scoreOutOf100: null,
@@ -218,8 +220,8 @@ export function analyzeProductSpecs(
 
   // --- 1. CPU / Chipset Tier ---
   const cpuVal = product.specs.processor?.value;
-  if (!cpuVal || !bandId) {
-    pushUnknownSpec('processor', 'Processor / SoC', cpuVal || undefined, 'Cannot evaluate raw compute potential without verified chipset model');
+  if (!cpuVal) {
+    pushUnknownSpec('processor', 'Processor / SoC', undefined, 'Cannot evaluate raw compute potential without verified chipset model');
   } else {
     const tier = getCpuTier(cpuVal, category);
     let rating: SpecRating = 'Average';
@@ -240,11 +242,16 @@ export function analyzeProductSpecs(
         else if (tier === 'upper-mid') { rating = 'Good'; score = 85; note = 'Expected premium CPU silicon'; }
         else if (tier === 'mid') { rating = 'Average'; score = 65; note = 'Acceptable, but modest for ₹75k-₹1.2L price point'; }
         else { rating = 'Weak'; score = 35; note = 'Entry silicon unsuitable for premium price band'; }
-      } else {
-        // Flagship
+      } else if (bandId === 'flagship') {
         if (tier === 'flagship') { rating = 'Excellent'; score = 95; note = 'Top-tier flagship silicon with maximum core density'; }
         else if (tier === 'upper-mid') { rating = 'Good'; score = 80; note = 'Solid premium performance, though below top-tier enthusiast chips'; }
         else { rating = 'Weak'; score = 30; note = 'Under-spec CPU for flagship tier'; }
+      } else {
+        // Absolute rating when price band is unverified
+        if (tier === 'flagship') { rating = 'Excellent'; score = 95; note = 'Top-tier flagship processor with high core count and maximum throughput'; }
+        else if (tier === 'upper-mid') { rating = 'Good'; score = 85; note = 'High-performance processor delivering strong sustained output'; }
+        else if (tier === 'mid') { rating = 'Good'; score = 78; note = 'Solid mainstream processor delivering reliable day-to-day speed'; }
+        else { rating = 'Average'; score = 65; note = 'Entry-level processor suited for lightweight productivity'; }
       }
     } else {
       // Smartphone
@@ -260,10 +267,15 @@ export function analyzeProductSpecs(
         if (tier === 'flagship') { rating = 'Excellent'; score = 95; note = 'Flagship SoC in sub-flagship value bracket'; }
         else if (tier === 'upper-mid') { rating = 'Good'; score = 85; note = 'Upper-tier chipset with strong sustained performance'; }
         else { rating = 'Weak'; score = 45; note = 'Below-par chipset for upper-mid category'; }
-      } else {
-        // Flagship
+      } else if (bandId === 'flagship') {
         if (tier === 'flagship') { rating = 'Excellent'; score = 95; note = 'Best-in-class flagship processing architecture'; }
         else { rating = 'Average'; score = 60; note = 'Non-flagship chipset in premium price bracket'; }
+      } else {
+        // Absolute rating when price band is unverified
+        if (tier === 'flagship') { rating = 'Excellent'; score = 95; note = 'Best-in-class flagship SoC architecture'; }
+        else if (tier === 'upper-mid') { rating = 'Good'; score = 85; note = 'Upper-tier mobile processor with strong gaming and AI capabilities'; }
+        else if (tier === 'mid') { rating = 'Good'; score = 78; note = 'Capable mid-tier processor for smooth multitasking'; }
+        else { rating = 'Average'; score = 60; note = 'Everyday mobile processor'; }
       }
     }
 
@@ -288,16 +300,20 @@ export function analyzeProductSpecs(
   // --- 2. RAM Capacity ---
   const ramVal = product.specs.ram?.value;
   const ramGb = parseRamGb(ramVal);
-  if (ramGb === null || !bandId) {
+  if (ramGb === null) {
     pushUnknownSpec('ram', 'RAM Capacity', ramVal || undefined, 'Memory capacity unconfirmed; affects multitasking certainty');
   } else {
-    const rule = (category === 'laptop' ? LAPTOP_REFERENCE_RANGES.ram : SMARTPHONE_REFERENCE_RANGES.ram).bands[bandId]?.numeric;
+    const rule = bandId
+      ? (category === 'laptop' ? LAPTOP_REFERENCE_RANGES.ram : SMARTPHONE_REFERENCE_RANGES.ram).bands[bandId]?.numeric
+      : (category === 'laptop' ? ABSOLUTE_LAPTOP_THRESHOLDS.ram : ABSOLUTE_SMARTPHONE_THRESHOLDS.ram);
     const { rating, score } = rateNumericSpec(ramGb, rule);
-    const typicalDesc = (category === 'laptop' ? LAPTOP_REFERENCE_RANGES.ram : SMARTPHONE_REFERENCE_RANGES.ram).bands[bandId]?.typicalDescription;
+    const typicalDesc = bandId
+      ? (category === 'laptop' ? LAPTOP_REFERENCE_RANGES.ram : SMARTPHONE_REFERENCE_RANGES.ram).bands[bandId]?.typicalDescription
+      : 'standard memory baseline';
     const note = rating === 'Excellent'
-      ? `${ramGb}GB exceeds the typical standard (${typicalDesc})`
+      ? `${ramGb}GB exceeds typical standard (${typicalDesc})`
       : rating === 'Good'
-      ? `${ramGb}GB is well-matched to the price band (${typicalDesc})`
+      ? `${ramGb}GB provides solid multitasking capacity`
       : rating === 'Average'
       ? `${ramGb}GB is acceptable baseline but offers modest headroom`
       : `${ramGb}GB is below expected standard (${typicalDesc})`;
@@ -322,31 +338,35 @@ export function analyzeProductSpecs(
 
   // --- 3. Storage Type & Size ---
   const storageVal = product.specs.storage?.value;
-  if (!storageVal || !bandId) {
-    pushUnknownSpec('storage', 'Storage Type & Capacity', storageVal || undefined, 'Storage volume and type unconfirmed');
+  if (!storageVal) {
+    pushUnknownSpec('storage', 'Storage Configuration', undefined, 'Storage volume and type unconfirmed');
   } else {
     const isSsd = isSsdStorage(storageVal);
     const numMatch = storageVal.match(/(\d+)\s*(?:GB|TB|gb|tb)/i);
     let sizeGb = numMatch ? parseInt(numMatch[1], 10) : null;
     if (sizeGb && /TB/i.test(numMatch?.[0] || '')) sizeGb *= 1024;
 
-    const rule = (category === 'laptop' ? LAPTOP_REFERENCE_RANGES.storage : SMARTPHONE_REFERENCE_RANGES.storage).bands[bandId]?.numeric;
+    const rule = bandId
+      ? (category === 'laptop' ? LAPTOP_REFERENCE_RANGES.storage : SMARTPHONE_REFERENCE_RANGES.storage).bands[bandId]?.numeric
+      : (category === 'laptop' ? ABSOLUTE_LAPTOP_THRESHOLDS.storage : ABSOLUTE_SMARTPHONE_THRESHOLDS.storage);
     let { rating, score } = rateNumericSpec(sizeGb, rule);
 
     // Penalize slow HDD or eMMC in non-entry tiers
-    if (isSsd === false && bandId !== 'entry') {
+    if (isSsd === false && bandId && bandId !== 'entry') {
       rating = 'Weak';
       score = 30;
     }
 
-    const typicalDesc = (category === 'laptop' ? LAPTOP_REFERENCE_RANGES.storage : SMARTPHONE_REFERENCE_RANGES.storage).bands[bandId]?.typicalDescription;
+    const typicalDesc = bandId
+      ? (category === 'laptop' ? LAPTOP_REFERENCE_RANGES.storage : SMARTPHONE_REFERENCE_RANGES.storage).bands[bandId]?.typicalDescription
+      : 'standard storage baseline';
     const note = rating === 'Excellent'
-      ? `${storageVal} provides generous high-speed storage above average (${typicalDesc})`
+      ? `${storageVal} provides generous high-speed storage`
       : rating === 'Good'
-      ? `${storageVal} matches standard expectations for ${bandLabel}`
+      ? `${storageVal} meets standard capacity requirements`
       : rating === 'Average'
       ? `${storageVal} offers basic storage headroom`
-      : `${storageVal} is constrained compared to peer average (${typicalDesc})`;
+      : `${storageVal} is constrained compared to peer average`;
 
     const rel = computeRelevance('storage', category, preferences);
     ratedSpecs.push({
@@ -368,8 +388,8 @@ export function analyzeProductSpecs(
 
   // --- 4. Display Quality & Refresh Rate ---
   const displayVal = product.specs.display?.value;
-  if (!displayVal || !bandId) {
-    pushUnknownSpec('display', 'Display (Panel & Refresh)', displayVal || undefined, 'Display resolution and refresh rate unconfirmed');
+  if (!displayVal) {
+    pushUnknownSpec('display', 'Display Specifications', undefined, 'Display resolution and refresh rate unconfirmed');
   } else {
     const { is1080pOrBetter, refreshRateHz, hasGoodColorGamut } = parseDisplaySpecs(displayVal);
     const isOled = /oled|amoled/i.test(displayVal);
@@ -390,7 +410,7 @@ export function analyzeProductSpecs(
         score = bandId === 'flagship' ? 65 : 80;
         note = 'Standard FHD IPS panel with clean viewability';
       } else {
-        rating = 'Weak'; score = 40; note = 'Sub-1080p resolution or low-quality panel for this price point';
+        rating = 'Weak'; score = 40; note = 'Sub-1080p resolution or low-quality panel';
       }
     } else {
       // Smartphone
@@ -401,7 +421,7 @@ export function analyzeProductSpecs(
       } else if (bandId === 'entry') {
         rating = 'Good'; score = 78; note = 'Adequate standard display for budget tier';
       } else {
-        rating = 'Weak'; score = 45; note = '60Hz LCD display is compromised at this price band';
+        rating = 'Average'; score = 60; note = 'Standard 60Hz LCD display';
       }
     }
 
@@ -429,16 +449,14 @@ export function analyzeProductSpecs(
   const batteryMahVal = parseBatteryMah(batteryCap);
 
   if (!batteryCap && batteryHours === undefined && !batteryMahVal) {
-    pushUnknownSpec('battery', 'Battery Capacity & Endurance', undefined, 'Battery capacity and claimed runtime unconfirmed');
-  } else if (!bandId) {
-    pushUnknownSpec('battery', 'Battery Capacity & Endurance', batteryCap || undefined, 'Cannot rate without confirmed price band');
+    pushUnknownSpec('battery', 'Battery Capacity & Life', undefined, 'Battery capacity and claimed runtime unconfirmed');
   } else {
     let rating: SpecRating = 'Average';
     let score = 70;
     let note = '';
 
     if (category === 'laptop') {
-      const rule = LAPTOP_REFERENCE_RANGES.batteryHours.bands[bandId]?.numeric;
+      const rule = bandId ? LAPTOP_REFERENCE_RANGES.batteryHours.bands[bandId]?.numeric : ABSOLUTE_LAPTOP_THRESHOLDS.batteryHours;
       if (batteryHours !== null && batteryHours !== undefined) {
         const res = rateNumericSpec(batteryHours, rule);
         rating = res.rating;
@@ -458,7 +476,7 @@ export function analyzeProductSpecs(
     } else {
       // Smartphone
       const mah = batteryMahVal || 5000;
-      const rule = SMARTPHONE_REFERENCE_RANGES.batteryMah.bands[bandId]?.numeric;
+      const rule = bandId ? SMARTPHONE_REFERENCE_RANGES.batteryMah.bands[bandId]?.numeric : ABSOLUTE_SMARTPHONE_THRESHOLDS.batteryMah;
       const res = rateNumericSpec(mah, rule);
       rating = res.rating;
       score = res.score || 75;
@@ -466,7 +484,7 @@ export function analyzeProductSpecs(
         ? `${mah}mAh high-capacity pack delivers confident multi-day endurance`
         : rating === 'Good'
         ? `${mah}mAh standard capacity easily powers heavy single-day usage`
-        : `${mah}mAh is smaller than current Indian market peer averages`;
+        : `${mah}mAh is smaller than current market peer averages`;
     }
 
     const rel = computeRelevance('battery', category, preferences);
@@ -489,12 +507,14 @@ export function analyzeProductSpecs(
 
   // --- 6. Charging Speed ---
   const chargingWatts = parseChargingWatts(product);
-  if (chargingWatts === null || !bandId) {
+  if (chargingWatts === null) {
     if (category === 'smartphone') {
       pushUnknownSpec('charging', 'Charging Speed', undefined, 'Charging wattage not verified');
     }
   } else {
-    const rule = category === 'smartphone' ? SMARTPHONE_REFERENCE_RANGES.chargingWatts.bands[bandId]?.numeric : undefined;
+    const rule = category === 'smartphone'
+      ? (bandId ? SMARTPHONE_REFERENCE_RANGES.chargingWatts.bands[bandId]?.numeric : ABSOLUTE_SMARTPHONE_THRESHOLDS.chargingWatts)
+      : undefined;
     let rating: SpecRating = 'Average';
     let score = 70;
     let note = '';
@@ -509,7 +529,6 @@ export function analyzeProductSpecs(
         ? `${chargingWatts}W fast charging matches current mid/high segment benchmarks`
         : `${chargingWatts}W charging speed is comparatively sluggish`;
     } else {
-      // Laptop: 65W is standard, 100W+ is excellent
       if (chargingWatts >= 100) { rating = 'Excellent'; score = 95; note = `${chargingWatts}W high-capacity USB-C PD fast charging`; }
       else if (chargingWatts >= 65) { rating = 'Good'; score = 85; note = `${chargingWatts}W standard fast charging`; }
       else { rating = 'Average'; score = 65; note = `${chargingWatts}W standard charger`; }
@@ -533,12 +552,12 @@ export function analyzeProductSpecs(
 
   // --- 7. Weight & Portability ---
   const weightKg = product.specs.weightKg?.value;
-  if (weightKg === null || weightKg === undefined || !bandId) {
+  if (weightKg === null || weightKg === undefined) {
     if (category === 'laptop') {
-      pushUnknownSpec('weight', 'Chassis Weight & Mobility', undefined, 'Chassis weight unconfirmed');
+      pushUnknownSpec('weight', 'Chassis Weight & Portability', undefined, 'Chassis weight unconfirmed');
     }
   } else {
-    const rule = LAPTOP_REFERENCE_RANGES.weight.bands[bandId]?.numeric;
+    const rule = bandId ? LAPTOP_REFERENCE_RANGES.weight.bands[bandId]?.numeric : ABSOLUTE_LAPTOP_THRESHOLDS.weight;
     const { rating, score } = rateNumericSpec(weightKg, rule, true); // Lower weight is better
     const note = rating === 'Excellent'
       ? `${weightKg}kg featherweight chassis is exceptionally easy to carry daily`
@@ -601,8 +620,8 @@ export function analyzeProductSpecs(
   // --- 9. Camera Hardware (Smartphones) ---
   if (category === 'smartphone') {
     const camStr = product.specs.camera?.value;
-    if (!camStr || !bandId) {
-      pushUnknownSpec('camera', 'Camera System & Optical Stabilization', camStr || undefined, 'Camera sensor and OIS details unconfirmed');
+    if (!camStr) {
+      pushUnknownSpec('camera', 'Camera Hardware & Optics', undefined, 'Camera sensor and OIS details unconfirmed');
     } else {
       const { hasOis, hasTelephoto, mainMegapixels } = parseCameraFeatures(camStr);
       let rating: SpecRating = 'Average';
@@ -615,8 +634,8 @@ export function analyzeProductSpecs(
         rating = (bandId === 'flagship') ? 'Good' : 'Excellent';
         score = (bandId === 'flagship') ? 85 : 92;
         note = 'Optical Image Stabilization (OIS) secures sharp low-light stills and steady video';
-      } else if (bandId === 'entry') {
-        rating = 'Good'; score = 78; note = 'Adequate daylight photography sensor for budget tier';
+      } else if (bandId === 'entry' || (mainMegapixels && mainMegapixels >= 50)) {
+        rating = 'Good'; score = 78; note = 'High-resolution main camera sensor for everyday photography';
       } else {
         rating = 'Weak'; score = 45; note = 'Lacks OIS hardware; prone to motion blur in low-light conditions';
       }
@@ -683,10 +702,9 @@ export function analyzeProductSpecs(
 
   // --- 11. Software Support Lifespan ---
   const updatePolicyYears = product.warranty.softwareUpdatePolicyYears?.value;
-  if (updatePolicyYears === null || updatePolicyYears === undefined || !bandId) {
-    pushUnknownSpec('softwareSupport', 'Software & Security Updates', undefined, 'Manufacturer official OS upgrade commitment unconfirmed');
+  if (updatePolicyYears === null || updatePolicyYears === undefined) {
+    pushUnknownSpec('softwareSupport', 'Software Support Horizon', undefined, 'Manufacturer official OS upgrade commitment unconfirmed');
   } else {
-    const rule = category === 'smartphone' ? SMARTPHONE_REFERENCE_RANGES.softwareSupportYears.bands[bandId]?.numeric : undefined;
     let rating: SpecRating = 'Average';
     let score = 70;
     let note = '';
@@ -696,8 +714,8 @@ export function analyzeProductSpecs(
     } else if (updatePolicyYears >= 3) {
       rating = 'Good'; score = 85; note = `${updatePolicyYears} major OS upgrades provide reassuring multi-year support`;
     } else if (updatePolicyYears >= 2) {
-      rating = bandId === 'entry' ? 'Good' : 'Average';
-      score = bandId === 'entry' ? 80 : 65;
+      rating = (bandId === 'entry' || !bandId) ? 'Good' : 'Average';
+      score = (bandId === 'entry' || !bandId) ? 80 : 65;
       note = `${updatePolicyYears} major updates matches baseline Indian market commitments`;
     } else {
       rating = 'Weak'; score = 40; note = `${updatePolicyYears} year update window is truncated for prolonged ownership`;

@@ -5,8 +5,11 @@
 
 export type EvidenceType =
   | 'verified'
-  | 'estimate'
+  | 'web-reported'
+  | 'seed-demo'
+  | 'ai-recalled'
   | 'user-provided'
+  | 'estimate'
   | 'ai-interpretation'
   | 'unknown';
 
@@ -28,12 +31,19 @@ export interface ProductSpecs {
   display?: EvidenceField<string>;
   batteryCapacity?: EvidenceField<string>;
   batteryLifeHours?: EvidenceField<number>;
+  battery?: EvidenceField<string>;
   weightKg?: EvidenceField<number>;
+  weight?: EvidenceField<string>;
   camera?: EvidenceField<string>;
+  gpu?: EvidenceField<string>;
   os?: EvidenceField<string>;
   ports?: EvidenceField<string>;
   refreshRate?: EvidenceField<string>;
   chargingSpeedWatts?: EvidenceField<number>;
+  chargingSpeed?: EvidenceField<string>;
+  durability?: EvidenceField<string>;
+  softwareUpdates?: EvidenceField<string>;
+  [key: string]: EvidenceField<any> | undefined;
 }
 
 export interface AspectSentiment {
@@ -110,6 +120,58 @@ export interface WarrantySupportInfo {
   sourceUrl?: string;
 }
 
+export interface TopicDebugInfo {
+  topic: string;
+  status: 'ok' | 'quota' | 'error' | 'empty' | 'no_search_key';
+  httpStatus: number;
+  groundingChunksCount: number;
+  groundingSupportsCount: number;
+  stepATextLength: number;
+  stepBFieldsExtracted: number;
+  fieldsKept: { field: string; value: any; status: string; sourceUrl?: string; sourceTitle?: string }[];
+  fieldsDropped: { field: string; value: any; reason: string }[];
+  directPageFetch?: {
+    urlsAttempted: string[];
+    urlsFetched: string[];
+    specsExtractedCount: number;
+    log: string[];
+  };
+  searchProvider?: string;
+  searchQueries?: string[];
+  pagesFetched?: string[];
+  retryCount: number;
+  errorMessage?: string;
+  durationMs: number;
+}
+
+export type SectionState = 'loaded' | 'partial' | 'failed' | 'quota-cooldown' | 'pending' | 'loading' | 'no-search-key';
+
+export interface SectionStatusInfo {
+  state: SectionState;
+  reason?: string;
+  countdownSeconds?: number;
+  updatedAt: string;
+}
+
+export interface ProductVariantOption {
+  id: string;
+  label: string; // e.g. "16GB RAM / 512GB SSD / Intel Core i5"
+  ram?: string;
+  storage?: string;
+  processor?: string;
+  indicativePriceInr?: number;
+}
+
+export interface ProvenanceInfo {
+  liveFetched: boolean;
+  groundingChunkCount: number;
+  retrievedAt: string;
+  status: 'live' | 'partial' | 'unavailable';
+  reason?: 'quota' | 'no_results' | 'error' | 'no_key' | 'no_search_key';
+  retryAfterSeconds?: number;
+  searchProvider?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -120,6 +182,9 @@ export interface Product {
   isDemonstrationData: boolean;
   isLiveFetched?: boolean;
   retrievedAt?: string;
+  provenance?: ProvenanceInfo;
+  selectedVariant?: string;
+  availableVariants?: ProductVariantOption[];
   priceInInr: EvidenceField<number>;
   priceQuotes?: PriceQuote[];
   conflictingSources?: ConflictingEvidence[];
@@ -132,6 +197,8 @@ export interface Product {
   dataCompleteness: number; // 0-100
   lastUpdated: string;
   sourceLinks?: { title: string; url: string; date: string }[];
+  researchDebug?: Record<string, TopicDebugInfo>;
+  sectionStatuses?: Record<string, SectionStatusInfo>;
 }
 
 export interface UserPreferences {
@@ -218,12 +285,14 @@ export interface CandidateProductMatch {
   matchConfidence: number; // 0 - 1
   keyAttributes: string[];
   needsConfirmationList: string[];
-  sourceInputType: 'photo' | 'url' | 'search';
+  sourceInputType: 'photo' | 'url' | 'search' | 'ai-suggested';
+  isAiSuggested?: boolean;
   identifiedDetails?: {
     modelNumber?: string;
     generation?: string;
     variant?: string;
   };
+  variants?: string[];
 }
 
 export interface UserFeedbackReport {

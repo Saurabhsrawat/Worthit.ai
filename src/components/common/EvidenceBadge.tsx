@@ -30,6 +30,27 @@ export const EvidenceBadge: React.FC<EvidenceBadgeProps> = ({
           bg: 'bg-emerald-50 text-emerald-800 border-emerald-200',
           dot: 'bg-emerald-600',
         };
+      case 'web-reported':
+        return {
+          label: 'Web-Reported Fact',
+          icon: CheckCircle2,
+          bg: 'bg-teal-50 text-teal-800 border-teal-200',
+          dot: 'bg-teal-600',
+        };
+      case 'seed-demo':
+        return {
+          label: 'Demonstration data, confirm',
+          icon: AlertTriangle,
+          bg: 'bg-orange-50 text-orange-800 border-orange-200',
+          dot: 'bg-orange-600',
+        };
+      case 'ai-recalled':
+        return {
+          label: 'AI-Recalled (Unverified)',
+          icon: Sparkles,
+          bg: 'bg-amber-50 text-amber-900 border-amber-300',
+          dot: 'bg-amber-600',
+        };
       case 'estimate':
         return {
           label: 'Estimate / Assumption',
@@ -54,7 +75,7 @@ export const EvidenceBadge: React.FC<EvidenceBadgeProps> = ({
       case 'unknown':
       default:
         return {
-          label: 'Unknown / Not Verified',
+          label: 'Unknown / Missing',
           icon: HelpCircle,
           bg: 'bg-slate-100 text-slate-700 border-slate-200',
           dot: 'bg-slate-400',
