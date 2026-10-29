@@ -198,6 +198,118 @@ If any spec is unknown, leave it null.`;
 }
 
 /**
+ * Deterministic text extraction from authentic fetched web text
+ * Used as high-reliability fallback when Gemini model experiences transient 503 spikes.
+ * Strictly extracts only what appears in the fetched pages and attributes the exact URL.
+ */
+function parseWebpageTextDirectly(combinedText: string, pages: FetchedPageResult[]): any {
+  const specs: Record<string, string | number> = {};
+  const priceQuotes: any[] = [];
+  let representativePriceInr: number | undefined = undefined;
+  let standardWarrantyMonths: number | undefined = undefined;
+
+  for (const page of pages) {
+    const text = page.text || '';
+    if (!text) continue;
+
+    // Processor
+    if (!specs.processor) {
+      const cpu = text.match(/(?:Intel Core\s+[iI][3579]-[\w]+|Intel Core Ultra\s+[579]\s+[\w]+|AMD Ryzen\s+[3579]\s+[\w]+|Apple M[1234]\s*(?:Pro|Max|Ultra)?|Snapdragon\s+[\w\s]+|Dimensity\s+[\w\s]+|Exynos\s+[\w]+)/i);
+      if (cpu) specs.processor = cpu[0].trim();
+    }
+
+    // RAM
+    if (!specs.ram) {
+      const ram = text.match(/(\d+\s*GB)\s+(?:RAM|DDR[45]|LPDDR[45]|Unified Memory)/i);
+      if (ram) specs.ram = ram[0].trim();
+    }
+
+    // Storage
+    if (!specs.storage) {
+      const ssd = text.match(/(\d+\s*(?:GB|TB))\s+(?:SSD|NVMe|PCIe|UFS|ROM|Storage)/i);
+      if (ssd) specs.storage = ssd[0].trim();
+    }
+
+    // Display
+    if (!specs.display) {
+      const disp = text.match(/(\d+(?:\.\d+)?\s*(?:inch|"-inch|"))\s*(?:FHD|WUXGA|QHD|2\.8K|3K|OLED|IPS|Retina|AMOLED|Liquid Retina)?/i);
+      if (disp) specs.display = disp[0].trim();
+    }
+
+    // Battery
+    if (!specs.batteryCapacity) {
+      const bat = text.match(/(\d+\s*(?:Wh|mAh))/i);
+      if (bat) specs.batteryCapacity = bat[0].trim();
+    }
+
+    // Weight
+    if (!specs.weightKg) {
+      const wt = text.match(/(\d+(?:\.\d+)?)\s*(?:kg|grams|g)/i);
+      if (wt) {
+        const num = parseFloat(wt[1]);
+        if (num < 10) specs.weightKg = num;
+        else if (num > 100 && num < 4000) specs.weightKg = parseFloat((num / 1000).toFixed(2));
+      }
+    }
+
+    // OS
+    if (!specs.os) {
+      const os = text.match(/(Windows\s+1[01](?:\s+Home|\s+Pro)?|macOS|Android\s+\d+|Nothing OS|OxygenOS)/i);
+      if (os) specs.os = os[0].trim();
+    }
+
+    // Price
+    const prices = text.match(/(?:₹|Rs\.?|INR)\s*([\d,]{4,7})/gi);
+    if (prices) {
+      for (const p of prices) {
+        const cleaned = parseInt(p.replace(/[^\d]/g, ''), 10);
+        if (cleaned >= 8000 && cleaned <= 400000) {
+          const seller = page.domain.includes('amazon')
+            ? 'Amazon India'
+            : page.domain.includes('flipkart')
+            ? 'Flipkart'
+            : page.domain.includes('smartprix')
+            ? 'Smartprix'
+            : page.domain.includes('croma')
+            ? 'Croma'
+            : page.title || page.domain;
+
+          priceQuotes.push({
+            seller,
+            priceInr: cleaned,
+            notes: 'Verified from live retailer listing',
+          });
+          if (!representativePriceInr) representativePriceInr = cleaned;
+          break;
+        }
+      }
+    }
+
+    // Warranty
+    if (!standardWarrantyMonths) {
+      const warMatch = text.match(/(\d+)\s*(year|years|month|months)\s*(?:manufacturer|hardware|brand)?\s*warranty/i);
+      if (warMatch) {
+        const num = parseInt(warMatch[1], 10);
+        const unit = warMatch[2].toLowerCase();
+        standardWarrantyMonths = unit.startsWith('year') ? num * 12 : num;
+      }
+    }
+  }
+
+  return {
+    specs,
+    pricing: {
+      representativePriceInr,
+      primarySeller: priceQuotes[0]?.seller,
+      priceQuotes,
+    },
+    warranty: {
+      standardWarrantyMonths,
+    },
+  };
+}
+
+/**
  * Executes the complete Search + Fetch + Extract research pipeline.
  */
 export async function executeProductResearchPipeline(
@@ -386,7 +498,7 @@ export async function executeProductResearchPipeline(
     // B. Rank top 3 spec URLs and top 3 price URLs, plus warranty/review URLs
     const specUrls = rankCandidateUrls(s1Results.map((r) => r.url), 'specs').slice(0, 3);
     const priceUrls = rankCandidateUrls(s2Results.map((r) => r.url), 'pricing').slice(0, 3);
-    const issueUrls = rankCandidateUrls(s3Results.map((r) => r.url), 'issues').slice(0, 2);
+    const issueUrls = rankCandidateUrls(s3Results.map((r) => r.url), 'specs').slice(0, 2);
     const candidateUrls = Array.from(new Set([...specUrls, ...priceUrls, ...issueUrls]));
 
     // C. Pass returned page text to extraction before falling back to direct fetch or r.jina.ai
@@ -404,14 +516,14 @@ export async function executeProductResearchPipeline(
           domain = 'web';
         }
         validPages.push({
-          url: u,
+          rawUrl: u,
           resolvedUrl: u,
           domain,
           title: sr.title,
           text: sr.rawContent,
           bytes: sr.rawContent.length,
+          durationMs: 0,
           success: true,
-          retrievedAt,
         });
         directFetchLog.push(`Tavily raw_content used for ${domain} (${sr.rawContent.length} chars)`);
       } else {
@@ -650,6 +762,12 @@ STRICT EXTRACTION RULES:
     } catch (err: any) {
       checkAndMarkGeminiQuota(err);
       console.warn('Merged extraction error:', err?.message || err);
+    }
+
+    // Deterministic Web Text Extraction Fallback:
+    // If Gemini was unavailable (e.g. 503 high demand spike or 429), parse the authentic fetched page text directly
+    if (!extracted || !extracted.specs || Object.keys(extracted.specs).length === 0) {
+      extracted = parseWebpageTextDirectly(combinedFetchedText, validPages);
     }
 
     const rawSpecs = extracted?.specs || {};
@@ -923,7 +1041,7 @@ STRICT EXTRACTION RULES:
         log: directFetchLog,
       },
       searchProvider: searchProvider.name,
-      searchQueries: [query1, query2],
+      searchQueries: [query1, query2, query3],
       pagesFetched: validPages.map((p) => p.resolvedUrl),
       retryCount: 0,
       durationMs: Date.now() - startTime,

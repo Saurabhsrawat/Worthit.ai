@@ -48,6 +48,55 @@ const FLASH_MODEL = 'gemini-3.1-flash-lite';
 // --- API ROUTES ---
 
 /**
+ * GET /api/health/search
+ * Health check endpoint for search provider:
+ * Reports whether TAVILY_API_KEY is set (never prints it), runs one test search,
+ * and returns the status, result count, and latency.
+ */
+app.get('/api/health/search', async (_req, res) => {
+  const tavilyKey = process.env.TAVILY_API_KEY;
+  const isTavilySet = Boolean(tavilyKey && tavilyKey.trim().length > 0);
+  const searchProvider = getSearchProvider();
+
+  if (!isTavilySet) {
+    return res.json({
+      provider: searchProvider.name,
+      isTavilySet: false,
+      status: 'unconfigured',
+      resultCount: 0,
+      message: 'TAVILY_API_KEY is not configured in server environment.',
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  const startTime = Date.now();
+  try {
+    const results = await searchProvider.search('Lenovo ThinkPad E14 Gen 5 India specifications', 2);
+    return res.json({
+      provider: searchProvider.name,
+      isTavilySet: true,
+      status: 'ok',
+      resultCount: results.length,
+      latencyMs: Date.now() - startTime,
+      sampleUrls: results.slice(0, 2).map((r) => r.url),
+      message: `Tavily API healthy. Retrieved ${results.length} live search results.`,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    return res.json({
+      provider: searchProvider.name,
+      isTavilySet: true,
+      status: 'error',
+      resultCount: 0,
+      latencyMs: Date.now() - startTime,
+      errorMessage: err.message,
+      message: `Tavily test search failed: ${err.message}`,
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+/**
  * 1. POST /api/identify-image
  * Analyzes photo upload to identify candidate products with confirmation flags
  */

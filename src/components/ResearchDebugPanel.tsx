@@ -30,6 +30,39 @@ export const ResearchDebugPanel: React.FC<ResearchDebugPanelProps> = ({
 
   const [isOpen, setIsOpen] = useState(isDebugUrl);
   const [activeTopic, setActiveTopic] = useState<string>('specs');
+  const [searchHealth, setSearchHealth] = useState<{
+    provider?: string;
+    isTavilySet?: boolean;
+    status: 'ok' | 'error' | 'unconfigured' | 'loading' | 'idle';
+    resultCount?: number;
+    latencyMs?: number;
+    sampleUrls?: string[];
+    message?: string;
+    errorMessage?: string;
+  }>({ status: 'idle' });
+
+  // Load search health status on expand or mount
+  React.useEffect(() => {
+    if (isOpen && searchHealth.status === 'idle') {
+      runSearchHealthCheck();
+    }
+  }, [isOpen]);
+
+  const runSearchHealthCheck = async () => {
+    setSearchHealth((prev) => ({ ...prev, status: 'loading' }));
+    try {
+      const res = await fetch('/api/health/search');
+      const data = await res.json();
+      setSearchHealth(data);
+    } catch (e: any) {
+      setSearchHealth({
+        status: 'error',
+        isTavilySet: false,
+        message: 'Could not reach /api/health/search',
+        errorMessage: e.message,
+      });
+    }
+  };
 
   if (!forceVisible && !isDebugUrl && !isDevMode) {
     return null;
@@ -117,6 +150,51 @@ export const ResearchDebugPanel: React.FC<ResearchDebugPanelProps> = ({
 
       {isOpen && (
         <div className="p-4 space-y-4">
+          {/* Search Health Card */}
+          <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs font-mono flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Globe className="w-4 h-4 text-cyan-400" />
+                <span className="font-bold text-slate-200">Search Engine Health (GET /api/health/search):</span>
+                {searchHealth.status === 'loading' && (
+                  <span className="text-amber-400 text-[11px] animate-pulse">Checking Tavily...</span>
+                )}
+                {searchHealth.status === 'ok' && (
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                    HEALTHY ({searchHealth.resultCount} test results in {searchHealth.latencyMs}ms)
+                  </span>
+                )}
+                {searchHealth.status === 'unconfigured' && (
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-950 text-amber-300 border border-amber-800">
+                    TAVILY KEY NOT CONFIGURED
+                  </span>
+                )}
+                {searchHealth.status === 'error' && (
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-950 text-rose-300 border border-rose-800">
+                    ERROR: {searchHealth.errorMessage || searchHealth.message}
+                  </span>
+                )}
+              </div>
+              <div className="text-[11px] text-slate-400">
+                Key status: <strong className={searchHealth.isTavilySet ? 'text-emerald-400' : 'text-amber-400'}>{searchHealth.isTavilySet ? 'Set in environment (hidden)' : 'Not Set'}</strong> • {searchHealth.message || 'Connecting to search health service...'}
+              </div>
+              {searchHealth.sampleUrls && searchHealth.sampleUrls.length > 0 && (
+                <div className="text-[10px] text-cyan-300 truncate max-w-xl">
+                  Sample URL: {searchHealth.sampleUrls[0]}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={runSearchHealthCheck}
+              disabled={searchHealth.status === 'loading'}
+              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] transition-colors border border-slate-700 shrink-0 self-start sm:self-auto"
+            >
+              {searchHealth.status === 'loading' ? 'Checking...' : 'Re-test Search'}
+            </button>
+          </div>
+
           {/* Section State Overview */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pb-3 border-b border-slate-800">
             {topics.map((t) => {

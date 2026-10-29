@@ -22,7 +22,7 @@ export interface PastReportRecord {
 interface SavedProductsPageProps {
   savedProducts: Product[];
   pastReports: PastReportRecord[];
-  comparedProductIds: string[];
+  comparedProducts: Product[];
   onSelectProduct: (product: Product) => void;
   onRemoveSaved: (productId: string) => void;
   onClearSaved: () => void;
@@ -34,7 +34,7 @@ interface SavedProductsPageProps {
 export const SavedProductsPage: React.FC<SavedProductsPageProps> = ({
   savedProducts,
   pastReports,
-  comparedProductIds,
+  comparedProducts,
   onSelectProduct,
   onRemoveSaved,
   onClearSaved,
@@ -86,11 +86,11 @@ export const SavedProductsPage: React.FC<SavedProductsPageProps> = ({
       </div>
 
       {/* Comparison Drawer Teaser if items in comparison */}
-      {comparedProductIds.length > 0 && (
+      {comparedProducts.length > 0 && (
         <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-xs text-teal-900 font-semibold">
             <Scale className="w-4 h-4 text-teal-700" />
-            <span>You have {comparedProductIds.length} items staged in your comparison tray.</span>
+            <span>You have {comparedProducts.length} items staged in your comparison tray.</span>
           </div>
           <button
             onClick={onNavigateToCompare}
@@ -133,7 +133,7 @@ export const SavedProductsPage: React.FC<SavedProductsPageProps> = ({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {savedProducts.map((p) => {
-                const isCompared = comparedProductIds.includes(p.id);
+                const isCompared = comparedProducts.some((cp) => cp.id === p.id);
                 return (
                   <div
                     key={p.id}

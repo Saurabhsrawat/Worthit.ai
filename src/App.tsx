@@ -16,6 +16,7 @@ import { CostCalculatorPage } from './pages/CostCalculatorPage';
 import { ComparisonPage } from './pages/ComparisonPage';
 import { SavedProductsPage, PastReportRecord } from './pages/SavedProductsPage';
 import { MethodologyPage } from './pages/MethodologyPage';
+import { ReplaceCompareModal } from './components/common/ReplaceCompareModal';
 import { RefreshCw, Sparkles, AlertCircle } from 'lucide-react';
 
 export default function App() {
@@ -23,10 +24,17 @@ export default function App() {
 
   // Stored state in localStorage
   const [savedProducts, setSavedProducts] = useLocalStorage<Product[]>('worthit_saved_products', [DEMO_SHOWCASE_PRODUCT]);
-  const [comparedProductIds, setComparedProductIds] = useLocalStorage<string[]>('worthit_compared_ids', [
-    DEMO_SHOWCASE_PRODUCT.id,
-    'seed-thinkpad-e14-gen5',
-  ]);
+  const [comparedProducts, setComparedProducts] = useLocalStorage<Product[]>('worthit_compared_products_v2', []);
+  const [replacingCandidate, setReplacingCandidate] = useState<Product | null>(null);
+
+  // Clear deprecated legacy compare IDs on load (Requirement 1)
+  useEffect(() => {
+    try {
+      localStorage.removeItem('worthit_compared_ids');
+    } catch {
+      // ignore
+    }
+  }, []);
   const [userPreferences, setUserPreferences] = useLocalStorage<UserPreferences>('worthit_preferences', {
     category: 'laptop',
     intendedUse: ['programming', 'everyday'],
@@ -310,13 +318,45 @@ export default function App() {
     }
   };
 
-  // Toggle Compare
-  const isCurrentProductCompared = comparedProductIds.includes(currentProduct.id);
-  const handleToggleCompare = () => {
-    if (isCurrentProductCompared) {
-      setComparedProductIds((prev) => prev.filter((id) => id !== currentProduct.id));
+  // Comparison Tray Handlers (Requirements 1, 2, 3, 4)
+  const isCurrentProductCompared = comparedProducts.some((p) => p.id === currentProduct.id);
+
+  const handleAddComparedProduct = (product: Product) => {
+    // If already in comparison, do not add duplicates
+    if (comparedProducts.some((p) => p.id === product.id)) {
+      return;
+    }
+    // Limit handling: at 4 products, trigger replace modal rather than silently dropping
+    if (comparedProducts.length >= 4) {
+      setReplacingCandidate(product);
+      return;
+    }
+    setComparedProducts((prev) => [...prev, product]);
+  };
+
+  const handleRemoveComparedProduct = (productId: string) => {
+    setComparedProducts((prev) => prev.filter((p) => p.id !== productId));
+  };
+
+  const handleClearAllCompared = () => {
+    setComparedProducts([]);
+  };
+
+  const handleReplaceComparedProduct = (targetProductId: string, incomingProduct: Product) => {
+    setComparedProducts((prev) =>
+      prev.map((p) => (p.id === targetProductId ? incomingProduct : p))
+    );
+    setReplacingCandidate(null);
+  };
+
+  const handleToggleCompare = (productToToggle?: Product) => {
+    const target = productToToggle || currentProduct;
+    if (!target) return;
+    const exists = comparedProducts.some((p) => p.id === target.id);
+    if (exists) {
+      handleRemoveComparedProduct(target.id);
     } else {
-      setComparedProductIds((prev) => [...prev, currentProduct.id].slice(0, 4));
+      handleAddComparedProduct(target);
     }
   };
 
@@ -390,19 +430,6 @@ export default function App() {
     setFeedbackList((prev) => [report, ...prev]);
   };
 
-  // Resolved list of compared products
-  const comparedProducts = useMemo(() => {
-    return comparedProductIds
-      .map((id) => {
-        if (id === currentProduct.id) return currentProduct;
-        const saved = savedProducts.find((p) => p.id === id);
-        if (saved) return saved;
-        const seed = SEED_PRODUCTS.find((p) => p.id === id);
-        return seed || null;
-      })
-      .filter((p): p is Product => p !== null);
-  }, [comparedProductIds, currentProduct, savedProducts]);
-
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900 font-sans antialiased">
       {/* Top Navigation */}
@@ -410,7 +437,7 @@ export default function App() {
         activePage={activePage}
         onNavigate={setActivePage}
         savedCount={savedProducts.length}
-        compareCount={comparedProductIds.length}
+        compareCount={comparedProducts.length}
       />
 
       {/* Live Research Pipeline Modal / Overlay */}
@@ -489,8 +516,10 @@ export default function App() {
             onUpdatePreferences={handleSavePreferences}
             isSaved={isCurrentProductSaved}
             isCompared={isCurrentProductCompared}
+            compareCount={comparedProducts.length}
             onToggleSave={handleToggleSave}
-            onToggleCompare={handleToggleCompare}
+            onToggleCompare={() => handleToggleCompare(currentProduct)}
+            onNavigateToCompare={() => setActivePage('compare')}
             onUpdateUserPrice={handleUpdateUserPrice}
             onNavigateToReviews={() => setActivePage('reviews')}
             onNavigateToCost={() => setActivePage('cost')}
@@ -520,12 +549,11 @@ export default function App() {
         {activePage === 'compare' && (
           <ComparisonPage
             comparedProducts={comparedProducts}
-            onRemoveProduct={(id) =>
-              setComparedProductIds((prev) => prev.filter((pId) => pId !== id))
-            }
-            onAddProduct={(p) =>
-              setComparedProductIds((prev) => [...prev, p.id].slice(0, 4))
-            }
+            currentProduct={currentProduct}
+            savedProducts={savedProducts}
+            onRemoveProduct={handleRemoveComparedProduct}
+            onClearAll={handleClearAllCompared}
+            onAddProduct={handleAddComparedProduct}
             onSelectProduct={(p) => {
               setCurrentProduct(p);
               setActivePage('dashboard');
@@ -538,7 +566,7 @@ export default function App() {
           <SavedProductsPage
             savedProducts={savedProducts}
             pastReports={pastReports}
-            comparedProductIds={comparedProductIds}
+            comparedProducts={comparedProducts}
             onSelectProduct={(p) => {
               setCurrentProduct(p);
               setActivePage('dashboard');
@@ -548,13 +576,7 @@ export default function App() {
             }
             onClearSaved={() => setSavedProducts([])}
             onClearHistory={() => setPastReports([])}
-            onToggleCompare={(p) => {
-              if (comparedProductIds.includes(p.id)) {
-                setComparedProductIds((prev) => prev.filter((id) => id !== p.id));
-              } else {
-                setComparedProductIds((prev) => [...prev, p.id].slice(0, 4));
-              }
-            }}
+            onToggleCompare={handleToggleCompare}
             onNavigateToCompare={() => setActivePage('compare')}
           />
         )}
@@ -585,6 +607,15 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* Replace Comparison Modal when tray is full (4 of 4) */}
+      <ReplaceCompareModal
+        isOpen={!!replacingCandidate}
+        onClose={() => setReplacingCandidate(null)}
+        incomingProduct={replacingCandidate}
+        currentComparedProducts={comparedProducts}
+        onReplace={handleReplaceComparedProduct}
+      />
     </div>
   );
 }

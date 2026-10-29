@@ -49,8 +49,10 @@ interface DashboardPageProps {
   onUpdatePreferences?: (prefs: UserPreferences) => void;
   isSaved: boolean;
   isCompared: boolean;
+  compareCount?: number;
   onToggleSave: () => void;
   onToggleCompare: () => void;
+  onNavigateToCompare?: () => void;
   onUpdateUserPrice: (priceInr: number) => void;
   onNavigateToReviews: () => void;
   onNavigateToCost: () => void;
@@ -68,8 +70,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onUpdatePreferences,
   isSaved,
   isCompared,
+  compareCount = 0,
   onToggleSave,
   onToggleCompare,
+  onNavigateToCompare,
   onUpdateUserPrice,
   onNavigateToReviews,
   onNavigateToCost,
@@ -475,15 +479,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </button>
 
               <button
-                onClick={onToggleCompare}
+                onClick={isCompared && onNavigateToCompare ? onNavigateToCompare : onToggleCompare}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 border ${
                   isCompared
-                    ? 'bg-blue-50 border-blue-300 text-blue-800'
+                    ? 'bg-blue-50 border-blue-300 text-blue-800 hover:bg-blue-100'
                     : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                 }`}
+                title={isCompared ? 'View in Side-by-Side Comparison' : 'Add device to comparison tray'}
               >
                 <Scale className="w-3.5 h-3.5" />
-                <span>{isCompared ? 'In Compare Tray' : 'Add to Comparison'}</span>
+                <span>
+                  {isCompared
+                    ? `In comparison (${compareCount}/4), view`
+                    : compareCount >= 4
+                    ? 'Comparison full (4/4)'
+                    : `Add to comparison (${compareCount}/4)`}
+                </span>
               </button>
 
               <button
