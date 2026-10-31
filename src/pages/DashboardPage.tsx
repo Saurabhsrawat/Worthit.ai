@@ -31,6 +31,7 @@ import {
   Store,
   Clock,
   Layers,
+  X,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -89,6 +90,78 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const [specEditOpen, setSpecEditOpen] = useState(false);
   const [thumbFeedback, setThumbFeedback] = useState<'up' | 'down' | null>(null);
   const [retryCountdown, setRetryCountdown] = useState<number>(product.provenance?.retryAfterSeconds || 0);
+
+  const [repairData, setRepairData] = useState<any>(product.repairability);
+  const [isRepairLoading, setIsRepairLoading] = useState(false);
+  const [repairError, setRepairError] = useState<string | null>(null);
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+  const [manualBattery, setManualBattery] = useState<'yes' | 'no' | 'unknown'>('unknown');
+  const [manualNotes, setManualNotes] = useState('');
+
+  // Sync repairData when product changes
+  useEffect(() => {
+    setRepairData(product.repairability);
+  }, [product.id, product.repairability]);
+
+  const handleFetchRepairability = async (force: boolean = true) => {
+    if (isRepairLoading) return;
+    setIsRepairLoading(true);
+    setRepairError(null);
+    try {
+      const res = await fetch('/api/research/repairability', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product }),
+      });
+      const data = await res.json();
+      if (data.repairability) {
+        setRepairData(data.repairability);
+        product.repairability = {
+          ...product.repairability,
+          ...data.repairability,
+        };
+        if (data.debugInfo) {
+          if (!(product as any).researchDebug) {
+            (product as any).researchDebug = {};
+          }
+          (product as any).researchDebug.repairability = data.debugInfo;
+        }
+      } else if (data.error) {
+        setRepairError(data.error);
+      }
+    } catch (err: any) {
+      setRepairError(err.message || 'Failed to fetch repairability data');
+    } finally {
+      setIsRepairLoading(false);
+    }
+  };
+
+  const handleSaveManualRepairability = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updated = {
+      ...repairData,
+      batteryReplaceable: manualBattery !== 'unknown' ? {
+        value: manualBattery === 'yes',
+        evidenceType: 'user-provided',
+        source: 'User contribution',
+        sourceUrl: '',
+        retrievedAt: new Date().toISOString(),
+      } : repairData?.batteryReplaceable,
+      notes: manualNotes.trim() ? {
+        value: manualNotes.trim(),
+        evidenceType: 'user-provided',
+        source: 'User contribution',
+        sourceUrl: '',
+        retrievedAt: new Date().toISOString(),
+      } : repairData?.notes,
+    };
+    setRepairData(updated);
+    product.repairability = {
+      ...product.repairability,
+      ...updated,
+    };
+    setIsManualModalOpen(false);
+  };
 
   useEffect(() => {
     if (product.provenance?.retryAfterSeconds) {
@@ -982,57 +1055,259 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </div>
           </div>
 
-          {/* Repairability & Upgradeability Card */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Wrench className="w-4 h-4 text-teal-700" />
-                <span>Repairability & Serviceability</span>
-              </h2>
-              <EvidenceBadge type={product.repairability.scoreOutOfTen?.evidenceType || 'estimate'} />
-            </div>
+          {/* Sourced Repairability & Serviceability Card */}
+          {(() => {
+            const isSourced = (field: any) => {
+              if (!field || field.value === null || field.value === undefined) return false;
+              if (field.evidenceType === 'unknown') return false;
+              return Boolean(field.sourceUrl || field.evidenceType === 'user-provided' || field.evidenceType === 'third_party_database' || field.evidenceType === 'primary_source');
+            };
 
-            <div className="grid grid-cols-2 gap-3 text-xs pt-1">
-              <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                <div className="text-slate-500">Serviceability Index</div>
-                <div className="text-lg font-bold text-slate-900 font-mono tabular-nums mt-0.5">
-                  {product.repairability.scoreOutOfTen?.value !== undefined && product.repairability.scoreOutOfTen?.value !== null
-                    ? `${product.repairability.scoreOutOfTen.value}/10`
-                    : 'Unknown / not verified'}
+            const hasScore = isSourced(repairData?.scoreOutOfTen);
+            const hasEu = isSourced(repairData?.euEnergyLabelClass);
+            const hasBattery = isSourced(repairData?.batteryReplaceable);
+            const hasParts = isSourced(repairData?.officialSparePartsInIndia) || isSourced(repairData?.sparePartsStatement);
+            const hasService = isSourced(repairData?.serviceCenterInfoIndia);
+            const hasNotes = isSourced(repairData?.notes);
+
+            const hasAnySourcedFact = hasScore || hasEu || hasBattery || hasParts || hasService || hasNotes;
+
+            return (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <Wrench className="w-4 h-4 text-teal-700" />
+                    <span>Repairability & Serviceability</span>
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    {hasAnySourcedFact ? (
+                      <EvidenceBadge
+                        type={
+                          repairData?.scoreOutOfTen?.evidenceType ||
+                          repairData?.euEnergyLabelClass?.evidenceType ||
+                          repairData?.batteryReplaceable?.evidenceType ||
+                          'web-reported'
+                        }
+                      />
+                    ) : (
+                      <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                        Excluded from score
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {!hasAnySourcedFact ? (
+                  <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-4 space-y-2">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="text-xs font-bold text-amber-900">
+                          Searched iFixit, EU energy label, manufacturer pages: not found
+                        </div>
+                        <p className="text-xs text-amber-800/90 mt-1 leading-relaxed">
+                          No official repairability index, teardown guide, or published spare parts catalog was verified for this exact variant. In accordance with WorthIt AI's zero-guess policy, this dimension is omitted rather than estimated.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3 text-xs">
+                    {/* Score / EU Class Row */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {hasScore && (
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 space-y-1">
+                          <div className="text-slate-500 flex items-center justify-between">
+                            <span>iFixit Teardown Score</span>
+                            <EvidenceBadge
+                              type={repairData.scoreOutOfTen.evidenceType || 'web-reported'}
+                              sourceUrl={repairData.scoreOutOfTen.sourceUrl}
+                            />
+                          </div>
+                          <div className="text-xl font-bold text-teal-900 font-mono tabular-nums">
+                            {repairData.scoreOutOfTen.value}/10
+                          </div>
+                          {repairData.scoreOutOfTen.sourceUrl && (
+                            <a
+                              href={repairData.scoreOutOfTen.sourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[11px] text-teal-700 hover:underline flex items-center gap-1 font-medium pt-0.5"
+                            >
+                              <span>Inspect iFixit teardown report</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      )}
+
+                      {hasEu && (
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 space-y-1">
+                          <div className="text-slate-500 flex items-center justify-between">
+                            <span>EU Repairability Class</span>
+                            <EvidenceBadge
+                              type={repairData.euEnergyLabelClass.evidenceType || 'web-reported'}
+                              sourceUrl={repairData.euEnergyLabelClass.sourceUrl}
+                            />
+                          </div>
+                          <div className="text-xl font-bold text-teal-900 font-mono">
+                            Class {repairData.euEnergyLabelClass.value}
+                          </div>
+                          <p className="text-[10px] text-amber-800 font-medium">
+                            EU rating, may differ for the Indian variant
+                          </p>
+                          {repairData.euEnergyLabelClass.sourceUrl && (
+                            <a
+                              href={repairData.euEnergyLabelClass.sourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[11px] text-teal-700 hover:underline flex items-center gap-1 font-medium"
+                            >
+                              <span>Official EU registry documentation</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Battery Replaceability */}
+                      {hasBattery && (
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 space-y-1">
+                          <div className="text-slate-500 flex items-center justify-between">
+                            <span>Battery User-Replaceable</span>
+                            <EvidenceBadge
+                              type={repairData.batteryReplaceable.evidenceType || 'web-reported'}
+                              sourceUrl={repairData.batteryReplaceable.sourceUrl}
+                            />
+                          </div>
+                          <div className="text-sm font-bold text-slate-900 mt-1">
+                            {repairData.batteryReplaceable.value ? 'Yes (Modular / Screws)' : 'Difficult / Glued'}
+                          </div>
+                          {repairData.batteryReplaceable.sourceUrl && (
+                            <a
+                              href={repairData.batteryReplaceable.sourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[11px] text-teal-700 hover:underline flex items-center gap-1 font-medium"
+                            >
+                              <span>Source reference</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Hardware Disassembly Notes */}
+                    {hasNotes && (
+                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 space-y-1">
+                        <div className="text-slate-500 flex items-center justify-between">
+                          <span className="font-semibold text-slate-700">Internal Hardware & Disassembly Notes</span>
+                          <EvidenceBadge
+                            type={repairData.notes.evidenceType || 'web-reported'}
+                            sourceUrl={repairData.notes.sourceUrl}
+                          />
+                        </div>
+                        <p className="text-xs text-slate-700 leading-relaxed pt-0.5">
+                          {repairData.notes.value}
+                        </p>
+                        {repairData.notes.sourceUrl && (
+                          <a
+                            href={repairData.notes.sourceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[11px] text-teal-700 hover:underline inline-flex items-center gap-1 font-medium pt-1"
+                          >
+                            <span>Verify source ({repairData.notes.sourceUrl.slice(0, 45)}...)</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Spare parts & India Service */}
+                    {(hasParts || hasService) && (
+                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 space-y-1.5 text-xs">
+                        {hasParts && (
+                          <div>
+                            <span className="font-semibold text-slate-800">Spare Parts in India: </span>
+                            <span className="text-slate-700">
+                              {repairData.sparePartsStatement?.value ||
+                                (repairData.officialSparePartsInIndia?.value ? 'Official spare parts available' : 'Third-party parts only')}
+                            </span>
+                            {repairData.sparePartsStatement?.sourceUrl && (
+                              <a
+                                href={repairData.sparePartsStatement.sourceUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="ml-1 text-teal-700 hover:underline inline-flex items-center gap-0.5"
+                              >
+                                <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            )}
+                          </div>
+                        )}
+                        {hasService && (
+                          <div>
+                            <span className="font-semibold text-slate-800">Support & Service Network: </span>
+                            <span className="text-slate-700">{repairData.serviceCenterInfoIndia.value}</span>
+                            {repairData.serviceCenterInfoIndia.sourceUrl && (
+                              <a
+                                href={repairData.serviceCenterInfoIndia.sourceUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="ml-1 text-teal-700 hover:underline inline-flex items-center gap-0.5"
+                              >
+                                <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {repairError && (
+                  <div className="text-xs text-rose-700 bg-rose-50 p-2.5 rounded-lg border border-rose-200">
+                    {repairError}
+                  </div>
+                )}
+
+                {/* Action buttons: Try Again & Manual Entry */}
+                <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => void handleFetchRepairability(true)}
+                    disabled={isRepairLoading}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRepairLoading ? 'animate-spin' : ''}`} />
+                    <span>{isRepairLoading ? 'Researching iFixit & Portals...' : 'Try Again / Refresh'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualBattery(
+                        repairData?.batteryReplaceable?.value === true
+                          ? 'yes'
+                          : repairData?.batteryReplaceable?.value === false
+                          ? 'no'
+                          : 'unknown'
+                      );
+                      setManualNotes(repairData?.notes?.value || '');
+                      setIsManualModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-teal-200 bg-teal-50 hover:bg-teal-100 text-teal-800 transition-colors"
+                  >
+                    <Edit2 className="w-3.5 h-3.5 text-teal-700" />
+                    <span>Add Manual Repair Info</span>
+                  </button>
                 </div>
               </div>
-              <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                <div className="text-slate-500">Battery Replaceable</div>
-                <div className="text-sm font-bold text-slate-900 mt-1">
-                  {product.repairability.batteryReplaceable?.value !== undefined
-                    ? product.repairability.batteryReplaceable.value
-                      ? 'Yes (Authorized / Screws)'
-                      : 'Difficult / Glued'
-                    : 'Unknown'}
-                </div>
-              </div>
-            </div>
-
-            {product.repairability.notes?.value && (
-              <p className="text-xs text-slate-600 pt-1">
-                {product.repairability.notes.value}
-              </p>
-            )}
-
-            {product.repairability.iFixitGuideUrl && (
-              <div className="pt-1">
-                <a
-                  href={product.repairability.iFixitGuideUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-teal-700 hover:text-teal-900 font-medium inline-flex items-center gap-1 underline"
-                >
-                  <span>View iFixit Teardown & Repair Guides</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
-            )}
-          </div>
+            );
+          })()}
 
           {/* Ownership Cost Teaser Card */}
           <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-sm space-y-4">
@@ -1154,6 +1429,76 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           }
         }}
       />
+
+      {/* Manual Repair Info Modal */}
+      {isManualModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Wrench className="w-4 h-4 text-teal-700" />
+                <span>Contribute Repair & Service Info</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsManualModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveManualRepairability} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  Battery User-Replaceability
+                </label>
+                <select
+                  value={manualBattery}
+                  onChange={(e) => setManualBattery(e.target.value as any)}
+                  className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 focus:outline-none focus:border-teal-600"
+                >
+                  <option value="unknown">Unknown / Not observed</option>
+                  <option value="yes">Yes — Modular / Standard Screws</option>
+                  <option value="no">No — Glued / Non-modular</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  Disassembly, RAM/Storage or Repair Notes
+                </label>
+                <textarea
+                  rows={3}
+                  value={manualNotes}
+                  onChange={(e) => setManualNotes(e.target.value)}
+                  placeholder="e.g. Battery uses pull tabs. 1 SO-DIMM RAM slot open, SSD easily swappable."
+                  className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 focus:outline-none focus:border-teal-600 resize-none"
+                />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  Will be recorded with a "User-provided" provenance badge.
+                </span>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsManualModalOpen(false)}
+                  className="px-3 py-1.5 rounded-lg font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-lg font-semibold bg-teal-700 hover:bg-teal-800 text-white transition-colors shadow-2xs"
+                >
+                  Save Contribution
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

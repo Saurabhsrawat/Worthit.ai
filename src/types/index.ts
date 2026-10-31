@@ -79,6 +79,25 @@ export interface GroundedSource {
   retrievedAt: string;
 }
 
+export interface ReviewSourceStat {
+  sourceId: string;
+  sourceName: string;
+  status: 'ok' | 'no_key' | 'quota' | 'error' | 'no_results' | 'skipped';
+  callsMade: number;
+  commentsFetched: number;
+  commentsRejected: number;
+  commentsAnalyzed: number;
+  message?: string;
+  urlsConsulted?: { title: string; url: string }[];
+}
+
+export interface ReviewQuote {
+  quote: string;
+  sourceTitle: string;
+  sourceUrl?: string;
+  author?: string;
+}
+
 export interface ReportedIssue {
   category: string; // e.g. "Motherboard failure", "Green line on AMOLED", "Hinge cracking"
   frequency: 'High' | 'Moderate' | 'Occasional' | 'Rare';
@@ -87,6 +106,9 @@ export interface ReportedIssue {
   sampleQuotes: string[];
   statusOrFix?: string; // e.g. "Free screen replacement program announced by brand in India"
   sourcesMentioning?: { title: string; url?: string }[];
+  verifiedQuotes?: ReviewQuote[];
+  isRepeatedTheme?: boolean; // 3+ comments across at least 2 sources
+  distinctSourcesCount?: number;
 }
 
 export interface ReviewDataset {
@@ -98,6 +120,16 @@ export interface ReviewDataset {
   reportedIssues: ReportedIssue[];
   sourcesConsultedList?: { title: string; url?: string }[];
   sourcesConsultedCount?: number;
+  sourceStats?: ReviewSourceStat[];
+  totalCommentsFetched?: number;
+  totalCommentsRejected?: number;
+  rejectionBreakdown?: {
+    notMatchingModel: number;
+    tooShort: number;
+    duplicate: number;
+  };
+  summaryNotice?: string;
+  analyzedAt?: string;
 }
 
 export interface RepairabilityInfo {
@@ -142,6 +174,7 @@ export interface TopicDebugInfo {
   retryCount: number;
   errorMessage?: string;
   durationMs: number;
+  reviewSources?: ReviewSourceStat[];
 }
 
 export type SectionState = 'loaded' | 'partial' | 'failed' | 'quota-cooldown' | 'pending' | 'loading' | 'no-search-key';

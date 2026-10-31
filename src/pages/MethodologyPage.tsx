@@ -250,20 +250,20 @@ export const MethodologyPage: React.FC = () => {
                 </tr>
                 <tr>
                   <td className="py-2.5 px-3 font-medium text-slate-900">
-                    Repairability & Software Longevity
+                    Repairability & Serviceability Evidence
                   </td>
                   <td className="py-2.5 px-3 font-mono">15%</td>
                   <td className="py-2.5 px-3 text-slate-600">
-                    Evaluates official serviceability index (0–10), battery replaceability, upgradable RAM/SSD, and published years of OS updates.
+                    Evaluates multi-source teardown and repairability evidence (iFixit teardown scores mapped 0–10 × 10, EU energy label repairability classes A=90 down to E=30, battery modularity, and manufacturer spare parts support in India). Strictly zero invented scores: if no sourced teardown or official service fact exists, the dimension is cleanly excluded with the message "Searched iFixit, EU energy label, manufacturer pages: not found" and remaining dimensions are renormalized.
                   </td>
                 </tr>
                 <tr>
                   <td className="py-2.5 px-3 font-medium text-slate-900">
-                    Reported Hardware Issue Risk
+                    Customer-Reported Issue Signals
                   </td>
                   <td className="py-2.5 px-3 font-mono">15%</td>
                   <td className="py-2.5 px-3 text-slate-600">
-                    Penalizes recurring hardware failure signals (motherboard, green line display, hinges) documented in Indian owner discourse.
+                    Evaluates multi-source public discussions across YouTube Data API v3 and community tech forums (Reddit, Team-BHP, TechEnclave, GSMArena, NotebookCheck). Activated only when at least 30 relevant comments or 2 sources exist; otherwise excluded with transparent renormalization. A theme is marked repeated only if 3+ comments across at least 2 sources report it. Mentions represent reported experiences of public commenters, not overall defect rates.
                   </td>
                 </tr>
               </tbody>
@@ -306,7 +306,8 @@ export const MethodologyPage: React.FC = () => {
                 <li><strong>Unannounced / Prototype Hardware:</strong> Products without commercial retail listings or official Indian distribution channels cannot be verified.</li>
                 <li><strong>Bulk Scraping:</strong> WorthIt AI does not crawl retailer HTML in bulk. Pages fetched server-side are strictly limited to the top 3 grounding references with 8s timeouts and 1MB size caps.</li>
                 <li><strong>Real-Time Flash Sale Stock:</strong> E-commerce prices fluctuate minute-by-minute with temporary bank coupons. Displayed prices are indicative market quotes with exact timestamp of retrieval.</li>
-                <li><strong>Statistical Failure Rates:</strong> Forum mentions (e.g. Reddit r/IndianGaming) highlight reported defect patterns, not statistically sampled failure rates.</li>
+                <li><strong>Sample of Public Commenters, Not Defect Rates:</strong> Public discussion mentions (YouTube comments, Reddit r/IndianGaming, Team-BHP, TechEnclave, GSMArena) represent reported experiences, not statistically sampled failure rates or owner percentages. WorthIt AI does not scrape Amazon or Flipkart.</li>
+                <li><strong>Zero Invented Repairability:</strong> Scores exist only if extracted from an exact-matching fetched page with a verified URL (iFixit teardown, EU energy label, or official manufacturer parts/service portal). If none are found, the rating is omitted rather than estimated. EU/France ratings are clearly labeled "EU rating, may differ for the Indian variant".</li>
               </ul>
             </div>
           </div>

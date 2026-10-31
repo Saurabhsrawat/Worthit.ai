@@ -286,59 +286,98 @@ export function calculateWorthItScore(
   // 4. Repairability & Support Evidence (Base 15%)
   let repairScore = 50;
   let repairCoverage = 0;
-  let repairReason = 'Limited repairability evidence.';
+  let repairReason = 'Searched iFixit, EU energy label, manufacturer pages: not found';
   let repairEvidence: EvidenceType = 'unknown';
 
-  const rep = product.repairability;
-  const war = product.warranty;
-  let repDataPoints = 0;
+  const rep = product.repairability as any;
 
-  if (rep?.scoreOutOfTen?.value !== undefined && rep?.scoreOutOfTen?.value !== null) {
-    repairScore = rep.scoreOutOfTen.value * 10;
-    repDataPoints += 2;
-    repairEvidence = rep.scoreOutOfTen.evidenceType;
-    if (rep.scoreOutOfTen.value >= 7) {
-      strengths.push('Favorable modularity or published repairability index.');
-    } else if (rep.scoreOutOfTen.value <= 4) {
-      tradeoffs.push('Restricted internal serviceability; glued chassis or soldered components.');
+  // Strict check: only count facts with a real sourceUrl or user-provided/third-party evidence
+  const isSourcedFact = (field: any) => {
+    if (!field || field.value === null || field.value === undefined) return false;
+    if (field.evidenceType === 'unknown') return false;
+    return Boolean(field.sourceUrl || field.evidenceType === 'user-provided' || field.evidenceType === 'third_party_database' || field.evidenceType === 'primary_source');
+  };
+
+  const hasSourcedScore = isSourcedFact(rep?.scoreOutOfTen);
+  const hasSourcedEu = isSourcedFact(rep?.euEnergyLabelClass);
+  const hasSourcedBattery = isSourcedFact(rep?.batteryReplaceable);
+  const hasSourcedRam = isSourcedFact(rep?.ramUpgradable);
+  const hasSourcedStorage = isSourcedFact(rep?.storageUpgradable);
+  const hasSourcedParts = isSourcedFact(rep?.officialSparePartsInIndia) || isSourcedFact(rep?.sparePartsStatement);
+  const hasSourcedService = isSourcedFact(rep?.serviceCenterInfoIndia);
+  const hasSourcedNotes = isSourcedFact(rep?.notes);
+
+  const sourcedFactsCount = [
+    hasSourcedScore,
+    hasSourcedEu,
+    hasSourcedBattery,
+    hasSourcedRam,
+    hasSourcedStorage,
+    hasSourcedParts,
+    hasSourcedService,
+    hasSourcedNotes
+  ].filter(Boolean).length;
+
+  if (sourcedFactsCount >= 1) {
+    let baseScore = 50;
+    let scoreSource = '';
+
+    if (hasSourcedScore && typeof rep.scoreOutOfTen.value === 'number') {
+      // iFixit 0-10 score mapped to 0-100 (* 10)
+      baseScore = rep.scoreOutOfTen.value * 10;
+      scoreSource = `iFixit score ${rep.scoreOutOfTen.value}/10`;
+      repairEvidence = rep.scoreOutOfTen.evidenceType || 'web-reported';
+      if (rep.scoreOutOfTen.value >= 7) {
+        strengths.push(`High modularity / repairability rating (${rep.scoreOutOfTen.value}/10).`);
+      } else if (rep.scoreOutOfTen.value <= 4) {
+        tradeoffs.push(`Restricted repairability (${rep.scoreOutOfTen.value}/10); glued chassis or non-modular components.`);
+      }
+    } else if (hasSourcedEu && rep.euEnergyLabelClass.value) {
+      // EU classes: A=90, B=75, C=60, D=45, E=30
+      const euVal = String(rep.euEnergyLabelClass.value).trim().toUpperCase();
+      const euMap: Record<string, number> = { A: 90, B: 75, C: 60, D: 45, E: 30 };
+      if (euMap[euVal]) {
+        baseScore = euMap[euVal];
+        scoreSource = `EU repairability class ${euVal} (EU rating, may differ for the Indian variant)`;
+        repairEvidence = rep.euEnergyLabelClass.evidenceType || 'web-reported';
+      }
+    }
+
+    if (hasSourcedBattery) {
+      if (rep.batteryReplaceable.value === true) {
+        baseScore += 10;
+        strengths.push('User or easily replaceable battery.');
+      } else if (rep.batteryReplaceable.value === false) {
+        baseScore -= 10;
+        tradeoffs.push('Battery is glued in and not easily user-replaceable.');
+      }
+    }
+
+    if (hasSourcedParts && rep.officialSparePartsInIndia?.value === true) {
+      baseScore += 5;
+      strengths.push('Official spare parts or self-repair catalog available.');
+    }
+
+    repairScore = Math.min(100, Math.max(15, Math.round(baseScore)));
+    repairCoverage = Math.min(100, Math.round((sourcedFactsCount / 4) * 100));
+    repairReason = scoreSource
+      ? `Computed from ${scoreSource} and ${sourcedFactsCount} sourced repairability fact(s).`
+      : `Based on ${sourcedFactsCount} sourced repairability and serviceability observation(s).`;
+    if (repairEvidence === 'unknown') {
+      repairEvidence = 'web-reported';
     }
   }
 
-  if (war?.softwareUpdatePolicyYears?.value) {
-    repDataPoints += 1;
-    const updYears = war.softwareUpdatePolicyYears.value;
-    if (updYears >= 5) {
-      repairScore += 10;
-      strengths.push(`${updYears}-year long-term software support commitment.`);
-    } else if (updYears <= 2) {
-      repairScore -= 10;
-      tradeoffs.push(`Shorter official OS update commitment (${updYears} years).`);
-    }
-  }
-
-  if (rep?.batteryReplaceable?.value !== null && rep?.batteryReplaceable?.value !== undefined) {
-    repDataPoints += 1;
-  }
-
-  repairCoverage = Math.min(100, Math.round((repDataPoints / 3) * 100));
-  if (repDataPoints > 0) {
-    repairReason = `Based on ${repDataPoints} documented service/warranty parameters in India.`;
-    if (repairEvidence === 'unknown') repairEvidence = 'estimate';
-  } else {
-    repairReason = 'Repairability rating and official spare parts availability unknown in Indian market.';
-  }
-
-  repairScore = Math.min(100, Math.max(15, repairScore));
-  const repairActive = repairCoverage >= 25;
+  const repairActive = sourcedFactsCount >= 1;
 
   dimensions.push({
     id: 'repairability',
     name: 'Repairability & Support Evidence',
-    score: repairScore,
+    score: repairActive ? repairScore : 0,
     weight: DEFAULT_DESIGN_WEIGHTS.repairability,
     rawWeight: DEFAULT_DESIGN_WEIGHTS.repairability,
     active: repairActive,
-    evidenceCoverage: repairCoverage,
+    evidenceCoverage: repairActive ? repairCoverage : 0,
     reason: repairReason,
     evidenceType: repairEvidence,
   });
@@ -346,10 +385,19 @@ export function calculateWorthItScore(
   // 5. Customer-reported issue indicators (Base 15%)
   let issueScore = 70;
   let issueCoverage = 0;
-  let issueReason = 'No customer review sample available.';
+  let issueReason = 'Not enough public comments found (searched YouTube, Reddit, Team-BHP...)';
   let issueEvidence: EvidenceType = 'unknown';
 
-  if (product.reviewData && product.reviewData.reviewCount > 0) {
+  const revCount = product.reviewData?.reviewCount || 0;
+  const sourcesCount =
+    product.reviewData?.sourcesConsultedCount ||
+    product.reviewData?.sourcesConsultedList?.length ||
+    product.reviewData?.sourceStats?.filter((s) => s.commentsAnalyzed > 0).length ||
+    0;
+
+  const hasEnoughEvidence = revCount >= 30 || sourcesCount >= 2;
+
+  if (product.reviewData && revCount > 0 && hasEnoughEvidence) {
     issueCoverage = 100;
     issueEvidence = product.reviewData.sampleType === 'licensed' ? 'verified' : 'ai-interpretation';
     const reportedIssues = product.reviewData.reportedIssues || [];
@@ -368,10 +416,10 @@ export function calculateWorthItScore(
     }
 
     issueScore = Math.max(20, Math.min(95, 88 - totalPenalty));
-    issueReason = `Analyzed across ${product.reviewData.reviewCount} customer reviews (${product.reviewData.sampleType} sample).`;
+    issueReason = `Analyzed across ${revCount} public comments from ${sourcesCount} source${sourcesCount !== 1 ? 's' : ''}.`;
   } else {
     issueCoverage = 0;
-    issueReason = 'No verified review data currently linked. User may paste sample reviews to analyze.';
+    issueReason = 'Not enough public comments found (searched YouTube, Reddit, Team-BHP...)';
   }
 
   const issueActive = issueCoverage > 0;

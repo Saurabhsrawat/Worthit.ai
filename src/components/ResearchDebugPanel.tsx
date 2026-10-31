@@ -339,6 +339,313 @@ export const ResearchDebugPanel: React.FC<ResearchDebugPanelProps> = ({
                 </div>
               )}
 
+              {/* Multi-Source Customer Review Pipeline Telemetry (Requirements 1, 3, 5, 6) */}
+              {activeTopic === 'issues' && product.reviewData?.sourceStats && (
+                <div className="space-y-4 bg-slate-950 border border-slate-800 rounded-lg p-4 font-mono text-xs">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <span className="font-bold text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Globe className="w-4 h-4 text-cyan-400" />
+                      <span>Review Pipeline Telemetry & Comment Accounting</span>
+                    </span>
+                    <span className="text-[11px] text-emerald-400 font-bold">
+                      {product.reviewData.reviewCount} Classified Units
+                    </span>
+                  </div>
+
+                  {product.reviewData.summaryNotice && (
+                    <div className="p-2.5 bg-slate-900 border border-slate-800 rounded text-[11px] text-amber-200 leading-relaxed">
+                      {product.reviewData.summaryNotice}
+                    </div>
+                  )}
+
+                  {/* Accounting Balance Check Grid (Numbers Add Up) */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div className="p-2.5 bg-slate-900/90 rounded border border-slate-800">
+                      <div className="text-[10px] text-slate-400 uppercase">1. Raw Fetched</div>
+                      <div className="text-base font-bold text-white mt-0.5">
+                        {product.reviewData.totalCommentsFetched || 0}
+                      </div>
+                      <div className="text-[10px] text-slate-500">From all adapters</div>
+                    </div>
+
+                    <div className="p-2.5 bg-slate-900/90 rounded border border-slate-800">
+                      <div className="text-[10px] text-rose-400 uppercase">2. Total Rejected</div>
+                      <div className="text-base font-bold text-rose-400 mt-0.5">
+                        {product.reviewData.totalCommentsRejected || 0}
+                      </div>
+                      <div className="text-[10px] text-slate-500">Filtered before Gemini</div>
+                    </div>
+
+                    <div className="p-2.5 bg-slate-900/90 rounded border border-slate-800">
+                      <div className="text-[10px] text-teal-400 uppercase">3. Deduplicated (Passed)</div>
+                      <div className="text-base font-bold text-teal-300 mt-0.5">
+                        {(product.reviewData as any).totalCommentsDeduplicated ??
+                          ((product.reviewData.totalCommentsFetched || 0) -
+                            (product.reviewData.totalCommentsRejected || 0))}
+                      </div>
+                      <div className="text-[10px] text-slate-500">Fetched - Rejected</div>
+                    </div>
+
+                    <div className="p-2.5 bg-slate-900/90 rounded border border-slate-800">
+                      <div className="text-[10px] text-emerald-400 uppercase">4. Sent to Analysis</div>
+                      <div className="text-base font-bold text-emerald-300 mt-0.5">
+                        {(product.reviewData as any).totalSentToAnalysis ??
+                          Math.min(300, (product.reviewData as any).totalCommentsDeduplicated || 0)}
+                      </div>
+                      <div className="text-[10px] text-slate-500">Capped at 300 max</div>
+                    </div>
+                  </div>
+
+                  {/* Post-Classification Experience Breakdown */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-[11px]">
+                    <div className="p-2 bg-slate-900/60 rounded border border-slate-800 flex items-center justify-between">
+                      <span className="text-slate-400">Classified by Batches:</span>
+                      <strong className="text-white">
+                        {(product.reviewData as any).totalClassified ?? product.reviewData.reviewCount}
+                      </strong>
+                    </div>
+
+                    <div className="p-2 bg-emerald-950/30 rounded border border-emerald-900/50 flex items-center justify-between">
+                      <span className="text-emerald-300">First-Hand Owner Reports:</span>
+                      <strong className="text-emerald-400">
+                        {(product.reviewData as any).totalFirstHandExperiences ?? 'Active'}
+                      </strong>
+                    </div>
+
+                    <div className="p-2 bg-amber-950/30 rounded border border-amber-900/50 flex items-center justify-between">
+                      <span className="text-amber-300">Non-Experiences Excluded:</span>
+                      <strong className="text-amber-400">
+                        {(product.reviewData as any).totalNonExperiencesExcluded ?? 0}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Rejection Breakdown */}
+                  {product.reviewData.rejectionBreakdown && (
+                    <div className="p-2.5 bg-slate-900/50 rounded border border-slate-800 space-y-1.5">
+                      <div className="text-[11px] font-bold text-slate-300">
+                        Detailed Rejection Accounting:
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-400">
+                        <span>
+                          Variant / Gen Mismatch:{' '}
+                          <strong className="text-amber-300">
+                            {(product.reviewData.rejectionBreakdown as any).variantMismatch || 0}
+                          </strong>
+                        </span>
+                        <span>
+                          Not matching model tokens:{' '}
+                          <strong className="text-white">
+                            {product.reviewData.rejectionBreakdown.notMatchingModel}
+                          </strong>
+                        </span>
+                        <span>
+                          Other generation:{' '}
+                          <strong className="text-white">
+                            {(product.reviewData.rejectionBreakdown as any).otherGeneration || 0}
+                          </strong>
+                        </span>
+                        <span>
+                          Under 20 chars / boilerplate:{' '}
+                          <strong className="text-white">
+                            {product.reviewData.rejectionBreakdown.tooShort}
+                          </strong>
+                        </span>
+                        <span>
+                          Duplicates:{' '}
+                          <strong className="text-white">
+                            {product.reviewData.rejectionBreakdown.duplicate}
+                          </strong>
+                        </span>
+                        <span>
+                          Sum of Rejected:{' '}
+                          <strong className="text-rose-400">
+                            {product.reviewData.totalCommentsRejected || 0}
+                          </strong>
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Per-Source Rows Table */}
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] font-bold text-slate-300">
+                      Adapter Source Breakdown:
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border border-slate-800">
+                        <thead className="bg-slate-900 text-slate-400 border-b border-slate-800">
+                          <tr>
+                            <th className="py-1.5 px-2.5">Source</th>
+                            <th className="py-1.5 px-2.5">Status</th>
+                            <th className="py-1.5 px-2.5">Calls</th>
+                            <th className="py-1.5 px-2.5">Fetched</th>
+                            <th className="py-1.5 px-2.5">Rejected</th>
+                            <th className="py-1.5 px-2.5">Classified</th>
+                            <th className="py-1.5 px-2.5">Consulted URLs</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800 text-slate-300">
+                          {product.reviewData.sourceStats.map((src, sIdx) => (
+                            <tr key={sIdx} className="hover:bg-slate-900/50">
+                              <td className="py-1.5 px-2.5 font-bold text-white">{src.sourceName}</td>
+                              <td className="py-1.5 px-2.5">
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                    src.status === 'ok'
+                                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                      : src.status === 'no_key'
+                                      ? 'bg-slate-800 text-slate-400 border border-slate-700'
+                                      : 'bg-amber-950 text-amber-300 border border-amber-800'
+                                  }`}
+                                >
+                                  {src.status}
+                                </span>
+                              </td>
+                              <td className="py-1.5 px-2.5 text-cyan-300">{src.callsMade}</td>
+                              <td className="py-1.5 px-2.5">{src.commentsFetched}</td>
+                              <td className="py-1.5 px-2.5 text-rose-400">{src.commentsRejected}</td>
+                              <td className="py-1.5 px-2.5 text-emerald-400 font-bold">{src.commentsAnalyzed}</td>
+                              <td className="py-1.5 px-2.5 text-[11px] max-w-xs truncate text-slate-400">
+                                {src.urlsConsulted && src.urlsConsulted.length > 0 ? (
+                                  <div className="space-y-0.5">
+                                    {src.urlsConsulted.slice(0, 2).map((u, uIdx) => (
+                                      <div key={uIdx} className="truncate">
+                                        <a
+                                          href={u.url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="text-teal-400 hover:underline"
+                                        >
+                                          {u.title || u.url}
+                                        </a>
+                                      </div>
+                                    ))}
+                                    {src.urlsConsulted.length > 2 && (
+                                      <span className="text-[10px] text-slate-500">
+                                        +{src.urlsConsulted.length - 2} more URLs
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  src.message || 'None'
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Domain-Level Verified Breakdown Table (Requirement 5) */}
+                  {(product.reviewData as any).domainStats &&
+                    (product.reviewData as any).domainStats.length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        <div className="text-[11px] font-bold text-slate-300">
+                          Active Contributing Domains (Comments & Forum Posts Analyzed):
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {(product.reviewData as any).domainStats.map(
+                            (ds: { domain: string; count: number }, idx: number) => (
+                              <div
+                                key={idx}
+                                className="p-2 rounded bg-slate-900 border border-slate-800 flex items-center justify-between"
+                              >
+                                <span className="text-teal-300 font-medium">{ds.domain}</span>
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-white">
+                                  {ds.count} posts
+                                </span>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    )}
+                </div>
+              )}
+
+              {/* Repairability & Teardown Research Telemetry */}
+              {activeTopic === 'repairability' && (
+                <div className="space-y-4 bg-slate-950 border border-slate-800 rounded-lg p-4 font-mono text-xs">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <span className="font-bold text-teal-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Globe className="w-4 h-4 text-teal-400" />
+                      <span>Multi-Source Teardown & Serviceability Telemetry</span>
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      Lazy 24h cached · Max 3 Tavily calls
+                    </span>
+                  </div>
+
+                  {/* Fetched Pages & Sources Consulted */}
+                  {(((product.repairability as any)?.sourcesConsulted?.length || 0) > 0 || (currentTopicDebug.pagesFetched?.length || 0) > 0) && (
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] font-bold text-slate-300">
+                        Pages Fetched Server-Side:
+                      </div>
+                      <div className="space-y-1">
+                        {((product.repairability as any)?.sourcesConsulted || []).map((src: any, sIdx: number) => (
+                          <div key={sIdx} className="p-2 rounded bg-slate-900 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px]">
+                            <div className="flex items-center gap-1.5">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-950 text-teal-300 border border-teal-800">
+                                {src.domain || 'web'}
+                              </span>
+                              <span className="text-slate-200 font-semibold truncate max-w-sm">{src.title}</span>
+                            </div>
+                            <a
+                              href={src.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-teal-400 hover:underline truncate max-w-xs text-[10px]"
+                            >
+                              {src.url}
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Unknown Fields with Sources Tried */}
+                  {((product.repairability as any)?.unknownFieldsWithSources?.length || 0) > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        <span>Unknown Fields (Sources Searched with Zero Inferred Guessing):</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {((product.repairability as any).unknownFieldsWithSources as any[]).map((uf: any, uIdx: number) => (
+                          <div key={uIdx} className="p-2 rounded bg-slate-900/80 border border-slate-800 text-[11px] space-y-1">
+                            <span className="text-amber-300 font-bold">{uf.field}</span>
+                            <div className="text-[10px] text-slate-400">
+                              Sources tried: {uf.sourcesTried?.join(', ') || 'iFixit, EPREL, Manufacturer'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Mismatch & Rejection Logs */}
+                  {((product.repairability as any)?.rejectionLog?.length || 0) > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="text-[11px] font-bold text-rose-400 flex items-center gap-1">
+                        <XCircle className="w-3.5 h-3.5" />
+                        <span>Variant & Generation Mismatch Rejections:</span>
+                      </div>
+                      <div className="p-2.5 rounded bg-rose-950/20 border border-rose-900/40 text-[11px] space-y-1 text-rose-300 max-h-32 overflow-y-auto">
+                        {((product.repairability as any).rejectionLog as string[]).map((entry: string, rIdx: number) => (
+                          <div key={rIdx} className="font-mono">
+                            › {entry}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Fields Kept Table */}
               <div className="space-y-2">
                 <div className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
