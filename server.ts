@@ -54,7 +54,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 // Initialize GoogleGenAI SDK with required telemetry header
 const apiKey = process.env.GEMINI_API_KEY;
